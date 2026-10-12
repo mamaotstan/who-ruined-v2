@@ -22,3 +22,37 @@
 
 /* Winning team overview */
 .winnerPanel{border-color:rgba(90,190,130,.25)}.winnerPanel .panel-title span{color:#75d69b}.winnerPlayer{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #202a25}.winnerPlayer:last-child{border-bottom:0}.winnerPlayerMain b,.winnerPlayerMain span,.winnerPlayerMain small{display:block}.winnerPlayerMain b{font-size:14px}.winnerPlayerMain span{font-size:12px;color:#a0d7b4;margin-top:3px}.winnerPlayerMain small{font-size:11px;color:#828b87;margin-top:5px}.winnerPlayer>strong{font-size:13px;color:#7bd59a;white-space:nowrap}@media(max-width:550px){.winnerPlayer{grid-template-columns:42px 1fr}.winnerPlayer .heroIcon{width:42px;height:42px}.winnerPlayer>strong{grid-column:2}}
+
+/* Team report: per-player mistakes + advice */
+#teamReport{display:grid;gap:12px}
+.repCard{background:#101319;border:1px solid #242730;border-radius:14px;padding:15px;overflow:hidden}
+.repCard.very-high{border-left:3px solid #ff4545}
+.repCard.high{border-left:3px solid #ff8a5b}
+.repCard.moderate{border-left:3px solid #ffb45b}
+.repCard.low{border-left:3px solid #78d39a}
+.repHead{display:grid;grid-template-columns:auto 52px 1fr auto;gap:12px;align-items:center}
+.repRank{font-size:18px;font-weight:900;color:#8a8e98;min-width:34px}
+.repTitle b{font-size:15px;display:block}
+.repTitle span{font-size:12px;color:#9aa0ab}
+.repScore{text-align:right}
+.scoreBar{width:150px;height:7px;background:#20232a;border-radius:99px;overflow:hidden;margin-bottom:6px}
+.scoreBar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#ff4545,#ff8a5b)}
+.repCard.low .scoreBar i{background:linear-gradient(90deg,#78d39a,#a8d67f)}
+.repCard.moderate .scoreBar i{background:linear-gradient(90deg,#ffb45b,#ff8a5b)}
+.repScore strong{font-size:26px;font-weight:950}
+.repScore small{display:block;color:#8a8e98;font-size:10px;margin-top:3px}
+.repBody{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin-top:13px}
+.repBad h4,.repGood h4{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#8a8e98;margin:0 0 8px}
+.repBad ul,.repGood ul{list-style:none;padding:0;margin:0;display:grid;gap:7px}
+.repBad li{background:#0d0f13;border-left:2px solid #ff4545;border-radius:9px;padding:9px 11px}
+.repBad li.ok{border-left-color:#78d39a}
+.repBad li b{font-size:12px;display:block}
+.repBad li span{font-size:11px;color:#858993;display:block;line-height:1.4;margin-top:2px}
+.repBad li em{font-style:normal;font-size:11px;color:#a8d67f;display:block;margin-top:5px;line-height:1.4}
+.repGood li{background:rgba(83,199,126,.05);border:1px solid #294235;border-radius:9px;padding:9px 11px}
+.repGood li b{font-size:12px;color:#7bd59a;display:block}
+.repGood li span{font-size:11px;color:#858993;display:block;margin-top:2px}
+.roleOverride{margin-top:6px;background:#0d0f13;border:1px solid #2b2f38;color:#c8ccd4;border-radius:8px;padding:6px 8px;font-size:11px;max-width:190px}
+.status button,#parseBtn,#parseBtn2{background:#1f9df0;border:0;color:#fff;border-radius:9px;padding:9px 15px;font-weight:800;cursor:pointer;font-size:12px}
+.status{margin-top:12px;font-size:13px;color:#9aa0ab}
+@media(max-width:750px){.repBody{grid-template-columns:1fr}.repHead{grid-template-columns:auto 42px 1fr}.repScore{grid-column:1/-1;text-align:left}.scoreBar{width:100%}}

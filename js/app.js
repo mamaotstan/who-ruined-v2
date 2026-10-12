@@ -400,10 +400,49 @@ function render(m,all,players,culprit,closeRuiner){
  $("winnerTeamName").textContent=`${winningTeam} · ${m.radiant_win?fmt(m.radiant_score):fmt(m.dire_score)} : ${m.radiant_win?fmt(m.dire_score):fmt(m.radiant_score)}`;
  $("winnerTeam").innerHTML=winningPlayers.map(p=>winnerPlayerCard(p)).join("");
  $("players").innerHTML=players.map((p)=>playerCard(p,p===culprit)).join("");
+ $("teamReport").innerHTML=teamReportHtml(players);
  const events=buildEvents(m,culprit); $("events").innerHTML=events.length?events.map(e=>`<div class="event ${e.danger?'danger':''}"><div class="eventTop"><span class="eventTime">${e.t}</span><span class="eventTag ${e.danger?'bad':''}">${e.danger?'НЕГАТИВНЫЙ СИГНАЛ':'ПОЛОЖИТЕЛЬНЫЙ СИГНАЛ'}</span></div><div class="eventPlayer"><img src="${e.player?.img||''}" alt="" onerror="this.style.visibility='hidden'"><div><strong>${esc(e.player?.name||'Игрок')}</strong><span>${esc(e.player?.hero||'Герой')}</span></div></div><b>${esc(e.title)}</b><div class="eventWhat"><strong>Что произошло:</strong> ${esc(e.text)}</div><div class="eventWhy"><strong>Почему это важно:</strong> ${esc(e.why)}</div></div>`).join(""):`<div class="empty">Для этого матча parsed event data недостаточно.</div>`;
  $("reasons").innerHTML=culprit.reasons.map(r=>`<div class="reason"><strong>+ ${esc(r[0])}</strong><span>${esc(r[1])}</span></div>`).join("");
 }
+function adviceFor(title, p){
+ const role=p.role||'';
+ const T=title||'';
+ if(T.includes('Фарм ниже')) return role.includes('Pos 2')?'Добивай пачки скиллами, не уходи с мида без руны или ганга с смоком.':'Добивай крипов, не уходи с линии без ТП, после проигранной линии фарми лес со стаками.';
+ if(T.includes('Fight Impact')) return 'Приходи на драки вместе с командой, держи позицию за инициатором, жми все кнопки в один фокус.';
+ if(T.includes('участие в убийствах')||T.includes('Пропускал')) return 'После 15-й минуты играй ближе к команде, всегда держи ТП, прилетай на первую же драку.';
+ if(T.includes('Цена смертей')||T.includes('времени мертв')) return 'Не ходи один без вижена, смотри миникарту перед выходом, купи смок или вард.';
+ if(T.includes('Фидил')) return 'Купи защиту именно от него: гост, форс, бкб или лотус. Не стой в его ренже без команды рядом.';
+ if(T.includes('Золото потеряно')) return 'Не дерись в лейте без денег на байбек, отдай вышку вместо смерти.';
+ if(T.includes('байбека')) return 'После 35-й минуты всегда держи золото на выкуп, не трать все в ноль.';
+ if(T.includes('вышки')||T.includes('давление на объекты')) return 'После выигранной драки иди в пуш с командой, а не в лес. Бей здания, пока враг мертв.';
+ if(T.includes('Проигранная линия')) return 'Смотри реплей первых 10 минут: харасс, денаи, контроль пачки, пуллы у саппортов.';
+ if(T.includes('Ниже уровня')) return 'Подтяни базу: ластхит, позиционка в драке, тайминги предметов для своего MMR.';
+ if(T.includes('utility')||T.includes('Роаминг')) return 'Ставь варды на точках, девардь смоками и сентрями, бери смок под ганг.';
+ if(T.includes('денаев')) return 'Денай крипов, не отдавай врагу халявный фарм, держи линию у своей вышки.';
+ if(T.includes('лес')) return 'Стакай лес саппортами и забирай стаки с АОЕ, не бегай по пустой карте.';
+ if(T.includes('конверсия')) return 'С деньгами надо драться и пушить, а не фармить дальше. Купи слот под драку и иди к команде.';
+ if(/Pos 1/.test(role)) return 'После ключевого предмета ищи окно для драки или объекта, а не продолжай фарм автоматически.';
+ if(/Pos 2/.test(role)) return 'Превращай преимущество в драки и объекты, а не в дополнительный фарм.';
+ if(/Pos 3/.test(role)) return 'Инициируй игру вокруг команды и объектов, не отдавай темп пассивным фармом.';
+ return 'Ищи активное влияние на карту: драки, объекты, вижен и помощь core в правильный момент.';
+}
+function isPositiveReason(t){
+ return /Отличный вклад|Приемлемая поддержка|Первая кровь|Положительный вклад|участвовал в драках|Смерти не были/.test(t||'');
+}
+function playerReportCard(p,i){
+ const kd=`${p.kills||0}/${p.deaths||0}/${p.assists||0}`;
+ const bad=p.reasons.filter(r=>!isPositiveReason(r[0]));
+ const good=p.reasons.filter(r=>isPositiveReason(r[0]));
+ const cls=p.score>=55?'very-high':p.score>=35?'high':p.score>=20?'moderate':'low';
+ const medal=['🥇','🥈','🥉','4.','5.'][i]||`${i+1}.`;
+ const mistakes=bad.length?bad.map(r=>`<li><b>${esc(r[0])}</b><span>${esc(r[1])}</span><em>→ ${esc(adviceFor(r[0],p))}</em></li>`).join(''):'<li class="ok"><b>Явных провалов нет</b><span>Ошибки распределены равномерно, матч проигран как команда.</span></li>';
+ const positives=good.length?`<div class="repGood"><h4>Что было хорошо</h4><ul>${good.map(r=>`<li><b>${esc(r[0])}</b><span>${esc(r[1])}</span></li>`).join('')}</ul></div>`:'';
+ return `<div class="repCard ${cls}"><div class="repHead"><span class="repRank">${medal}</span><img class="heroIcon" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div class="repTitle"><b>${esc(p.personaname||'Unknown')}</b><span>${esc(heroName(p))} · ${esc(p.role||'')}</span></div><div class="repScore"><div class="scoreBar"><i style="width:${p.score}%"></i></div><strong>${p.score}</strong><small>KDA ${kd} · GPM ${fmt(p.gold_per_min)} · KP ${(p.kp||0).toFixed(0)}%</small></div></div><div class="repBody"><div class="repBad"><h4>Ошибки</h4><ul>${mistakes}</ul></div>${positives}</div></div>`;
+}
 function metricLine(label,value,detail){return `<div class="vmetric"><span>${esc(label)}</span><b>${esc(value)}</b><small>${esc(detail)}</small></div>`;}
+function teamReportHtml(players){
+ return players.map((p,i)=>playerReportCard(p,i)).join('');
+}
 function impactLabel(score){ if(score>=75)return "Очень высокое"; if(score>=55)return "Высокое"; if(score>=35)return "Умеренное"; if(score>=20)return "Небольшое"; return "Низкое"; }
 function impactClass(score){ if(score>=75)return "very-high"; if(score>=55)return "high"; if(score>=35)return "moderate"; if(score>=20)return "low"; return "minimal"; }
 function verdictText(m,p,r){
@@ -494,7 +533,7 @@ function playerCard(p,isCulprit){
  const roleOpts=['Pos 1 · Carry','Pos 2 · Mid','Pos 3 · Offlane','Pos 4 · Soft Support','Pos 5 · Hard Support'].map(r=>`<option value="${r}"${r===p.role?' selected':''}>${r}</option>`).join('');
  return `<div class="playerCard ${isCulprit?'culprit':''}">
   <div class="playerHead"><img class="heroIcon" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div><div class="pname">${esc(p.personaname||'Unknown')}</div><div class="heroName">${esc(heroName(p))} · <b>${esc(p.role||"Unknown")}</b> <small>(${p.roleConfidence}%)</small></div><select class="roleOverride" data-slot="${p.player_slot}" onchange="overrideRole(${p.player_slot},this.value)">${roleOpts}</select></div><div class="pScore">${p.score}</div></div>
-  <div class="statgrid"><span>K/D/A <b>${kd}</b></span><span>GPM <b>${fmt(p.gold_per_min)}</b></span><span>XPM <b>${fmt(p.xp_per_min)}</b></span><span>Last Hits <b>${fmt(p.last_hits)}</b></span><span>Hero DMG <b>${fmt(p.hero_damage)}</b></span><span>DMG Share <b>${p.dmgShare.toFixed(1)}%</b></span><span>KP <b>${p.kp.toFixed(0)}%</b></span><span>Tower DMG <b>${fmt(p.tower_damage)}</b></span><span>Net Worth <b>${fmt(p.net_worth)}</b></span><span>Healing <b>${fmt(p.hero_healing)}</b></span><span>Wards <b>${fmt((p.obs_placed||0)+(p.sentry_placed||0))}</b></span><span>Denies <b>${fmt(p.denies)}</b></span></div>
+  <div class="statgrid"><span>K/D/A <b>${kd}</b></span><span>GPM <b>${fmt(p.gold_per_min)}</b></span><span>XPM <b>${fmt(p.xp_per_min)}</b></span><span>Last Hits <b>${fmt(p.last_hits)}</b></span><span>Hero DMG <b>${fmt(p.hero_damage)}</b></span><span>DMG Share <b>${p.dmgShare.toFixed(1)}%</b></span><span>KP <b>${p.kp.toFixed(0)}%</b></span><span>Tower DMG <b>${fmt(p.tower_damage)}</b></span><span>Net Worth <b>${fmt(p.net_worth)}</b></span><span>Healing <b>${fmt(p.hero_healing)}</b></span><span>Wards <b>${fmt((p.obs_placed||0)+(p.sen_placed||0))}</b></span><span>Denies <b>${fmt(p.denies)}</b></span></div>
   <div class="build"><span>Сборка</span>${items.length?items.map(id=>`<img title="${esc(itemName(id))}" src="${itemImg(id)}" onerror="this.style.visibility='hidden'">`).join(''):'<em>нет данных</em>'}</div>
  </div>`;
 }
