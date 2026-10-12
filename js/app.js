@@ -294,7 +294,8 @@ function scorePlayer(p,c){
 
  // --- Parsed-match signals (only available after parse, m.version set) ---
  let lanePenalty = 0, tfPenalty = 0, bmPenalty = 0, feedPenalty = 0, roamPenalty = 0;
- let laneTxt = '', tfTxt = '', bmTxt = '', feedTxt = '';
+ let deadPenalty = 0, goldLossPenalty = 0, bbPenalty = 0, towerPenalty = 0, denyPenalty = 0, neutPenalty = 0, fbBonus = 0;
+ let laneTxt = '', tfTxt = '', bmTxt = '', feedTxt = '', deadTxt = '', goldLossTxt = '';
  if(isParsed){
   // 1. Lane efficiency: % of max possible gold in first 10 min
   const le = p.lane_efficiency || 0;
@@ -324,11 +325,39 @@ function scorePlayer(p,c){
   if((role.includes('Pos 4')||role.includes('Pos 5')) && p.is_roaming && kp < 50 && (p.obs_placed||0) < 5){
    roamPenalty = 2;
   }
+  // 6. Dead time: % of match spent dead (life_state_dead / duration)
+  const deadFrac = (p.life_state_dead||0) / Math.max(1,duration);
+  if(deadFrac > 0.15 && deaths >= 5){ deadPenalty = 3; deadTxt = `${(deadFrac*100).toFixed(0)}% матча мертв (${time(p.life_state_dead||0)})`; }
+  else if(deadFrac > 0.10 && deaths >= 5){ deadPenalty = 1; deadTxt = `${(deadFrac*100).toFixed(0)}% матча мертв`; }
+  // 7. Gold lost to deaths (gold_reasons['1']) relative to networth
+  const deathGold = Math.abs(Number((p.gold_reasons||{})['1']||0));
+  if(deathGold > 2000 && deathGold > (p.net_worth||0)*0.12){
+   goldLossPenalty = 2; goldLossTxt = `Потерял ${fmt(deathGold)} золота на смертях`;
+  }
+  // 8. Buyback discipline: late game deaths without buyback available/used
+  if(duration > 35*60 && deaths >= 3 && !(p.buyback_log||[]).length && (p.buyback_count||0) === 0){
+   bbPenalty = 2;
+  }
+  // 9. Tower kills contribution for cores (0 towers as pos 1/2/3 in 40+ min game)
+  if(duration > 35*60 && (role.includes('Pos 1')||role.includes('Pos 2')||role.includes('Pos 3')) && (p.tower_kills||0) === 0 && (p.towers_killed||0) === 0){
+   towerPenalty = 2;
+  }
+  // 10. Roshan participation handled in utility via roshanContribution; no penalty here
+  // 11. Denies for mids/cores (lane dominance)
+  if((role.includes('Pos 1')||role.includes('Pos 2')) && duration > 20*60 && (p.denies||0) < 3){
+   denyPenalty = 1;
+  }
+  // 12. Neutral farm for farming cores (pos 1 with <30 neutrals in 35+ min = inefficient jungle use)
+  if(role.includes('Pos 1') && duration > 35*60 && (p.neutral_kills||0) < 30){
+   neutPenalty = 1;
+  }
+  // 13. First blood: small credit
+  if(p.firstblood_claimed) fbBonus = -1;
  }
  // Adjusted utility scaling: now 0-25 range, threshold raised to 15 for full credit
  const utilityNormalized = Math.max(0, (15 - utilityCredit) / 15);
  const raw=100*(w.farm*(farmGap/18)+w.fight*(fightPenalty/33)+w.error*(errorPenalty/27)+w.obj*(objectivePenalty/11)+w.utility*utilityNormalized);
- const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty;
+ const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty+deadPenalty+goldLossPenalty+bbPenalty+towerPenalty+denyPenalty+neutPenalty+fbBonus;
  const score=clamp(raw+efficiencyPenalty+parsedBonus,0,100);
  const confidence=clamp(55+(c.m.teamfights?12:0)+(c.m.objectives?8:0)+(p.gold_t?7:0)+(p.xp_t?5:0)+(p.roleInfo?.confidence||0)*.12,45,94);
  const reasons=[];
@@ -342,6 +371,13 @@ function scorePlayer(p,c){
  if(bmPenalty>0) reasons.push([`Ниже уровня своего MMR`,bmTxt]);
  if(feedPenalty>0) reasons.push([`Фидил одного героя`,feedTxt]);
  if(roamPenalty>0) reasons.push([`Роаминг без импакта`,`is_roaming при низком KP и малом числе вардов.`]);
+ if(deadPenalty>0) reasons.push([`Много времени мертв`,deadTxt]);
+ if(goldLossPenalty>0) reasons.push([`Золото потеряно на смертях`,goldLossTxt]);
+ if(bbPenalty>0) reasons.push([`Нет байбека в лейте`,`Смерти в лейте без выкупа.`]);
+ if(towerPenalty>0) reasons.push([`Не сносил вышки`,`0 снесенных вышек у кора в долгой игре.`]);
+ if(denyPenalty>0) reasons.push([`Мало денаев`,`Слабый контроль линии для ${role}.`]);
+ if(neutPenalty>0) reasons.push([`Не фармил лес`,`Мало нейтралов для керри в долгой игре.`]);
+ if(fbBonus<0) reasons.push([`Первая кровь`,`Взял FB — небольшой плюс.`]);
  if(objectivePenalty>5) reasons.push([`Слабое давление на объекты`,`${fmt(p.tower_damage)} урона по строениям для ${role}.`]);
  // Enhanced utility feedback
  if(utilityCredit>=15) reasons.push([`Отличный вклад поддержки`,`Vision score ${visionScore.toFixed(1)}, поддержка команды снижает blame.`]);
