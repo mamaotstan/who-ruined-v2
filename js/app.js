@@ -13,10 +13,42 @@ $("form").addEventListener("submit",async e=>{
  try{
   const [mr,hr,ir]=await Promise.all([fetch(`${API}/matches/${id}`),fetch(`${API}/constants/heroes`),fetch(`${API}/constants/items`)]);
   if(!mr.ok)throw Error("Матч не найден");
-  const m=await mr.json(); HEROES=hr.ok?await hr.json():{}; ITEMS=ir.ok?await ir.json():{};
-  await await analyze(m); $("status").textContent=`Матч ${id} обработан`;
+  let m=await mr.json(); HEROES=hr.ok?await hr.json():{}; ITEMS=ir.ok?await ir.json():{};
+  // Auto-parse: if match not parsed (no version/lane data), request parse and poll
+  if(!m.version){
+   $("status").innerHTML=`Матч не распарсен. <button id="parseBtn" type="button">Допарсить матч</button> <span id="parseProg"></span>`;
+   $("parseBtn").onclick=()=>requestParse(id);
+   await analyze(m); // show basic analysis meanwhile
+   $("status").innerHTML+=`<br>Показан базовый разбор. Допарси для точных ролей и вардов. <button id="parseBtn2" type="button">Допарсить матч</button> <span id="parseProg"></span>`;
+   const b2=$("parseBtn2"); if(b2)b2.onclick=()=>requestParse(id);
+  } else {
+   await await analyze(m); $("status").textContent=`Матч ${id} обработан`;
+  }
  }catch(err){$("status").textContent="Ошибка: "+err.message}
 });
+
+async function requestParse(id){
+ const prog=$("parseProg")||$("status");
+ try{
+  prog.textContent="Отправляем запрос на парсинг…";
+  const rr=await fetch(`${API}/request/${id}`,{method:"POST"});
+  if(!rr.ok)throw Error("OpenDota отклонил запрос");
+  const poll=async attempt=>{
+   if(attempt>20){prog.textContent="Парсинг затянулся, попробуй ввести ID заново через пару минут";return;}
+   prog.textContent=`Парсим реплей… (${attempt*15} сек)`;
+   await new Promise(r=>setTimeout(r,15000));
+   const mr=await fetch(`${API}/matches/${id}`);
+   if(!mr.ok){poll(attempt+1);return;}
+   const m=await mr.json();
+   if(m.version){
+    prog.textContent="Готово, обновляем разбор…";
+    await analyze(m);
+    $("status").textContent=`Матч ${id} допарсен и обработан`;
+   } else poll(attempt+1);
+  };
+  poll(1);
+ }catch(err){prog.textContent="Ошибка парсинга: "+err.message}
+}
 
 function heroData(p){return HEROES[String(p.hero_id)]||HEROES[p.hero_id]||{};}
 function heroName(p){return heroData(p).localized_name||`Hero #${p.hero_id}`;}
@@ -259,10 +291,45 @@ function scorePlayer(p,c){
  
  // Efficiency penalty only if <70% of expected AND not a split-pusher
  const efficiencyPenalty = (!isSplitPusher && efficiency < expectedEfficiency * 0.7) ? 5 : 0;
+
+ // --- Parsed-match signals (only available after parse, m.version set) ---
+ let lanePenalty = 0, tfPenalty = 0, bmPenalty = 0, feedPenalty = 0, roamPenalty = 0;
+ let laneTxt = '', tfTxt = '', bmTxt = '', feedTxt = '';
+ if(isParsed){
+  // 1. Lane efficiency: % of max possible gold in first 10 min
+  const le = p.lane_efficiency || 0;
+  if(le > 0 && le < 0.45 && (role.includes('Pos 1')||role.includes('Pos 2')||role.includes('Pos 3'))){
+   lanePenalty = 4; laneTxt = `Lane efficiency ${(le*100).toFixed(0)}% — проиграл линию`;
+  }
+  // 2. Teamfight participation: skipped fights
+  const tfp = p.teamfight_participation;
+  if(tfp !== undefined && tfp !== null && tfp < 0.4 && (c.m.teamfights||[]).length >= 4){
+   tfPenalty = 4; tfTxt = `Участие в тимфайтах ${(tfp*100).toFixed(0)}% при ${c.m.teamfights.length} драках — пропускал файты`;
+  }
+  // 3. Benchmarks: percentile vs same MMR bracket
+  const bm = p.benchmarks || {};
+  let lowBm = 0;
+  for(const k of ['gold_per_min','xp_per_min','hero_damage_per_min','kills_per_min']){
+   if(bm[k] && bm[k].pct !== undefined && bm[k].pct < 0.25) lowBm++;
+  }
+  if(lowBm >= 2){ bmPenalty = 3; bmTxt = `${lowBm} показателей в нижних 25% среди того же MMR (gold/xp/damage/kills)`; }
+  // 4. Feeding one hero: >40% deaths from same killer
+  const kb = p.killed_by || {};
+  const topKiller = Object.entries(kb).sort((a,b)=>b[1]-a[1])[0];
+  if(topKiller && deaths >= 5 && topKiller[1] / deaths > 0.4){
+   const hn = topKiller[0].replace('npc_dota_hero_','');
+   feedPenalty = 3; feedTxt = `${topKiller[1]} из ${deaths} смертей от ${hn} — фидил одного героя`;
+  }
+  // 5. Roaming without impact (supports with low wards + low KP)
+  if((role.includes('Pos 4')||role.includes('Pos 5')) && p.is_roaming && kp < 50 && (p.obs_placed||0) < 5){
+   roamPenalty = 2;
+  }
+ }
  // Adjusted utility scaling: now 0-25 range, threshold raised to 15 for full credit
  const utilityNormalized = Math.max(0, (15 - utilityCredit) / 15);
  const raw=100*(w.farm*(farmGap/18)+w.fight*(fightPenalty/33)+w.error*(errorPenalty/27)+w.obj*(objectivePenalty/11)+w.utility*utilityNormalized);
- const score=clamp(raw+efficiencyPenalty,0,100);
+ const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty;
+ const score=clamp(raw+efficiencyPenalty+parsedBonus,0,100);
  const confidence=clamp(55+(c.m.teamfights?12:0)+(c.m.objectives?8:0)+(p.gold_t?7:0)+(p.xp_t?5:0)+(p.roleInfo?.confidence||0)*.12,45,94);
  const reasons=[];
  if(farmGap>5) reasons.push([`Фарм ниже ожидания для ${role}`,`GPM ${farm}; ориентир модели ≈ ${expectedGpm}.`]);
@@ -270,6 +337,11 @@ function scorePlayer(p,c){
  if(kpGap>5) reasons.push([`Низкое участие в убийствах`,`Kill Participation ${kp.toFixed(0)}%; ориентир модели ≈ ${expectedKP}%.`]);
  if(errorPenalty>7) reasons.push([`Цена смертей слишком высока`,`${deaths} смертей с повышенным весом поздней игры.`]);
  if(efficiencyPenalty>0) reasons.push([`Низкая конверсия ресурсов в результат`,`Efficiency ${(efficiency*100).toFixed(1)}% от ожидаемого для ${role}.`]);
+ if(lanePenalty>0) reasons.push([`Проигранная линия`,laneTxt]);
+ if(tfPenalty>0) reasons.push([`Пропускал командные драки`,tfTxt]);
+ if(bmPenalty>0) reasons.push([`Ниже уровня своего MMR`,bmTxt]);
+ if(feedPenalty>0) reasons.push([`Фидил одного героя`,feedTxt]);
+ if(roamPenalty>0) reasons.push([`Роаминг без импакта`,`is_roaming при низком KP и малом числе вардов.`]);
  if(objectivePenalty>5) reasons.push([`Слабое давление на объекты`,`${fmt(p.tower_damage)} урона по строениям для ${role}.`]);
  // Enhanced utility feedback
  if(utilityCredit>=15) reasons.push([`Отличный вклад поддержки`,`Vision score ${visionScore.toFixed(1)}, поддержка команды снижает blame.`]);
