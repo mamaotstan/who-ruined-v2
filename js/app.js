@@ -193,10 +193,11 @@ async function analyze(m){
  }
  // Rich-but-useless bonus: player 40%+ richer than teammates with low impact
  for(const p of scored){
-  const matesNW=team.filter(x=>x.player_slot!==p.player_slot).reduce((a,x)=>a+(x.net_worth||0),0)/4;
+  const role = p.role || '';
+  const expectedDamageForRole = {"Pos 1 · Carry":.23,"Pos 2 · Mid":.22,"Pos 3 · Offlane":.18,"Pos 4 · Soft Support":.11,"Pos 5 · Hard Support":.09}[role]||.17;
   const teamSortedNW = team.map(x=>x.net_worth||0).sort((a,b)=>b-a);
   const isTop2NW = (p.net_worth||0) >= teamSortedNW[1];
-  if(isTop2NW && (p.kp||0)<45 && (p.dmgShare||0)<expectedDamage*70){
+  if(isTop2NW && (p.kp||0)<45 && (p.dmgShare||0)<expectedDamageForRole*70){
    p.score=Math.min(100,p.score+12);
    p.reasons.push([`Ресурсы не конвертированы в результат`,`Top-2 networth в команде, но низкий KP (${(p.kp||0).toFixed(0)}%) и DMG share (${(p.dmgShare||0).toFixed(1)}%)`]);
   }
@@ -304,6 +305,7 @@ function scorePlayer(p,c){
  // --- Parsed-match signals (only available after parse, m.version set) ---
  let lanePenalty = 0, tfPenalty = 0, bmPenalty = 0, feedPenalty = 0, roamPenalty = 0;
  let deadPenalty = 0, goldLossPenalty = 0, bbPenalty = 0, towerPenalty = 0, denyPenalty = 0, neutPenalty = 0, fbBonus = 0;
+ let zeroImpactPenalty = 0, veryLowKpPenalty = 0;
  let laneTxt = '', tfTxt = '', bmTxt = '', feedTxt = '', deadTxt = '', goldLossTxt = '';
  if(isParsed){
   // 1. Lane efficiency: % of max possible gold in first 10 min
@@ -362,20 +364,18 @@ function scorePlayer(p,c){
   }
   // 13. First blood: small credit
   if(p.firstblood_claimed) fbBonus = -1;
-  }
-  // NEW: Zero impact penalty (0 kills AND low participation)
-  let zeroImpactPenalty = 0;
-  if(kills === 0 && !role.includes('Pos 5')){
+ }
+ // Zero impact penalty (0 kills AND low participation) - applies to all matches
+ if(kills === 0 && !role.includes('Pos 5')){
   if(kp < 50 || dmgShare < 12){
    zeroImpactPenalty = 8;
   }
-  }
-  // NEW: Very low KP penalty (below 35%)
-  let veryLowKpPenalty = 0;
-  if(kp < 35 && kp > 0){
+ }
+ // Very low KP penalty (below 35%) - applies to all matches
+ if(kp < 35 && kp > 0){
   veryLowKpPenalty = 5;
-  }
-  // Adjusted utility scaling: now 0-25 range, threshold raised to 15 for full credit
+ }
+ // Adjusted utility scaling: now 0-25 range, threshold raised to 15 for full credit
   const utilityNormalized = Math.max(0, (15 - utilityCredit) / 15);
   const raw=100*(w.farm*(farmGap/18)+w.fight*(fightPenalty/33)+w.error*(errorPenalty/22)+w.obj*(objectivePenalty/11)+w.utility*utilityNormalized);
   const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty+deadPenalty+goldLossPenalty+bbPenalty+towerPenalty+denyPenalty+neutPenalty+fbBonus;
