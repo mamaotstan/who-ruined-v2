@@ -234,8 +234,8 @@ function scorePlayer(p,c){
  const damageGap=clamp((expectedDamage*100-dmgShare)*.65,0,15);
  const kpGap=clamp((expectedKP-kp)*.20,0,12);
  const fightPenalty=damageGap+kpGap+Math.min(6,lowFightEvents*1.5);
- const lateFactor=duration>45*60?1.7:duration>35*60?1.4:duration>25*60?1.15:.85;
- let errorPenalty=Math.min(22,deaths*1.75*lateFactor);
+ const lateFactor=duration>45*60?2.0:duration>35*60?1.6:duration>25*60?1.2:.85;
+ let errorPenalty=Math.min(26,deaths*2.1*lateFactor);
  // Tactical feeder reduction: high deaths but tried to fight
  if(deaths>=10 && kp>65 && dmgShare>expectedDamage*80){
   errorPenalty=Math.round(errorPenalty*0.7); // reduce by 30%
@@ -367,17 +367,17 @@ function scorePlayer(p,c){
  }
  // Zero impact penalty (0 kills AND low participation) - applies to all matches
  if(kills === 0 && !role.includes('Pos 5')){
-  if(kp < 50 || dmgShare < 12){
-   zeroImpactPenalty = 8;
-  }
+   if(kp < 50 || dmgShare < 12){
+    zeroImpactPenalty = 12;
+   }
  }
  // Very low KP penalty (below 35%) - applies to all matches
  if(kp < 35 && kp > 0){
-  veryLowKpPenalty = 5;
+   veryLowKpPenalty = 7;
  }
  // Adjusted utility scaling: now 0-25 range, threshold raised to 15 for full credit
   const utilityNormalized = Math.max(0, (15 - utilityCredit) / 15);
-  const raw=100*(w.farm*(farmGap/18)+w.fight*(fightPenalty/33)+w.error*(errorPenalty/22)+w.obj*(objectivePenalty/11)+w.utility*utilityNormalized);
+  const raw=100*(w.farm*(farmGap/18)+w.fight*(fightPenalty/36)+w.error*(errorPenalty/26)+w.obj*(objectivePenalty/11)+w.utility*utilityNormalized);
   const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty+deadPenalty+goldLossPenalty+bbPenalty+towerPenalty+denyPenalty+neutPenalty+fbBonus;
   const score=clamp(raw+efficiencyPenalty+parsedBonus+zeroImpactPenalty+veryLowKpPenalty,0,100);
  const confidence=clamp(55+(c.m.teamfights?12:0)+(c.m.objectives?8:0)+(p.gold_t?7:0)+(p.xp_t?5:0)+(p.roleInfo?.confidence||0)*.12,45,94);
