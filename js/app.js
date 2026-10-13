@@ -366,9 +366,11 @@ function scorePlayer(p,c){
   // 13. First blood: small credit
   if(p.firstblood_claimed) fbBonus = -1;
   // 14. Первый кор-слот: только самый первый большой предмет. Остальной билд не оцениваем — там слишком много вариантов.
+  // Сапоги, мидас и дешевка (<2800) не считаются: первый слот ищем среди дорогих.
   if((role.includes('Pos 1')||role.includes('Pos 2')||role.includes('Pos 3'))){
    const pt = p.purchase_time || {};
-   const big = Object.entries(pt).filter(([k,t])=>t>0&&FARM_TIMING[k]).sort((a,b)=>a[1]-b[1]);
+   const isCore = (k,t) => t>0 && FARM_TIMING[k] && !['power_treads','phase_boots','arcane_boots','tranquil_boots','hand_of_midas','mask_of_madness'].includes(k);
+   const big = Object.entries(pt).filter(([k,t])=>isCore(k,t)).sort((a,b)=>a[1]-b[1]);
    if(big.length){
     const [k,t] = big[0];
     const g = (typeof timingGrade === 'function') ? timingGrade(k, t, p.hero_id, 1) : null;
@@ -595,7 +597,8 @@ function itemTimingsHtml(m,all,losers){
   const notes=[];
   const bigSorted=Object.entries(pt).filter(([k,t])=>t>0&&(RU_ITEMS[k]||FARM_TIMING[k])).sort((a,b)=>a[1]-b[1]);
   const bigIdx={}; bigSorted.forEach(([k],i)=>{ if(FARM_TIMING[k]) bigIdx[k]=Object.keys(bigIdx).length+1; });
-  const firstBig=bigSorted.find(([k])=>FARM_TIMING[k])?.[0];
+  const notBoots=k=>!['power_treads','phase_boots','arcane_boots','tranquil_boots','hand_of_midas','mask_of_madness'].includes(k);
+  const firstBig=bigSorted.find(([k])=>FARM_TIMING[k]&&notBoots(k))?.[0];
   const keys=bigSorted.slice(0,8).map(([k,t])=>{
    const g=timingGrade(k,t,p.hero_id,bigIdx[k]||1);
    const nm=itemRu(k);
