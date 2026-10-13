@@ -366,11 +366,14 @@ function scorePlayer(p,c){
   // 13. First blood: small credit
   if(p.firstblood_claimed) fbBonus = -1;
   // 14. Item timings: late core slots (only for parsed matches, only cores)
+  // order = номер большого слота: считаем крупные покупки по времени
   if((role.includes('Pos 1')||role.includes('Pos 2')||role.includes('Pos 3'))){
    const pt = p.purchase_time || {};
+   const bigOrder = Object.entries(pt).filter(([k,t])=>t>0&&FARM_TIMING[k]).sort((a,b)=>a[1]-b[1]);
+   const orderOf = {}; bigOrder.forEach(([k],i)=>{ orderOf[k]=i+1; });
    for(const [k,t] of Object.entries(pt)){
     if(t <= 0) continue;
-    const g = (typeof timingGrade === 'function') ? timingGrade(k, t) : null;
+    const g = (typeof timingGrade === 'function') ? timingGrade(k, t, p.hero_id, orderOf[k]||1) : null;
     if(g && g[1] > 0){
      itemPenalty += g[1];
      const nm = (typeof itemRu === 'function') ? itemRu(k) : k;
@@ -549,14 +552,41 @@ function itemRu(key){
  if(it&&(it.dname||it.localized_name)) return it.dname||it.localized_name;
  return key;
 }
-// Ожидаемые тайминги фарм-слотов (сек): [идеал, хорошо, поздно]
-// После "поздно" — говно, в score идет пенальти
-const FARM_TIMING={'bfury':[720,840,960],'radiance':[900,1080,1260],'manta':[1080,1260,1440],'hand_of_midas':[300,420,540],'mask_of_madness':[480,660,840],'diffusal_blade':[720,900,1080],'echo_sabre':[600,780,960],'maelstrom':[600,780,960],'mjollnir':[1200,1440,1680],'black_king_bar':[1080,1320,1560],'aghanims_scepter':[900,1140,1380],'blink':[600,840,1080],'shadow_blade':[600,780,960],'silver_edge':[1200,1440,1680],'desolator':[720,900,1080],'crystalys':[720,900,1080],'armlet':[480,660,840],'power_treads':[360,540,720],'phase_boots':[360,540,720],'witch_blade':[600,780,960],'dragon_lance':[600,780,960],'hurricane_pike':[1080,1260,1440],'linkens_sphere':[900,1140,1380],'orchid':[600,780,960],'bloodthorn':[1200,1440,1680],'nullifier':[1200,1440,1680],'sheepstick':[1200,1500,1800],'shivas_guard':[1080,1320,1560],'heart':[1200,1500,1800],'assault':[1200,1500,1800],'butterfly':[1320,1560,1800],'satanic':[1320,1620,1920],'abyssal_blade':[1320,1620,1920],'skadi':[1200,1500,1800],'daedalus':[1200,1500,1800],'greater_crit':[1200,1500,1800],'monkey_king_bar':[1080,1320,1560],'bloodstone':[720,960,1200],'octarine_core':[1080,1320,1560],'refresher':[1440,1740,2040],'travel_boots':[1200,1500,1800]};
-function timingGrade(key,t){
- const th=FARM_TIMING[key]; if(!th) return null;
- if(t<=th[0]) return ['идеал',0];
- if(t<=th[1]) return ['хорошо',0];
- if(t<=th[2]) return ['поздно',2];
+// Калибровка по 739 покупкам из 28 хайранкед пабов (avg_rank 65+, 6000+ ммр).
+// Пороги: [хорошо (p25), норма (медиана), поздно (p75)]. Раньше медианы = идеал, раньше p75 = хорошо.
+// Инициаторы (Шейкер/Магнус/Акс/Тайд/Тинкер/ДК) берут блинк на ~5 мин раньше — отдельная строка.
+// Слот не первый (куплен 2-м+ большим предметом) = +6 мин скидки: спокойная игра, сначала другой слот.
+const FARM_TIMING={
+ 'bfury':[790,880,1020],'radiance':[920,1000,1180],'manta':[1020,1210,1410],
+ 'hand_of_midas':[830,980,1060],'mask_of_madness':[510,590,630],'diffusal_blade':[730,910,1420],
+ 'echo_sabre':[770,860,970],'maelstrom':[740,900,1080],'mjollnir':[990,1060,1270],
+ 'black_king_bar':[1530,1720,1980],'aghanims_scepter':[900,1140,1380],
+ 'blink':[920,1190,1510],'blink_initiator':[560,700,860],
+ 'shadow_blade':[600,780,960],'silver_edge':[1580,1820,1970],
+ 'desolator':[1240,1370,1400],'crystalys':[720,900,1080],'armlet':[610,700,760],
+ 'power_treads':[350,410,500],'phase_boots':[410,470,590],
+ 'witch_blade':[880,1090,2290],'dragon_lance':[1160,1400,1590],
+ 'hurricane_pike':[1440,1510,1700],'linkens_sphere':[900,1140,1380],
+ 'orchid':[1120,1350,1940],'bloodthorn':[1940,2000,2080],
+ 'nullifier':[2340,2340,2340],'sheepstick':[1750,1950,2080],
+ 'shivas_guard':[1590,1900,2370],'heart':[1810,1820,1860],
+ 'assault':[2000,2030,2060],'butterfly':[1580,1690,1960],
+ 'satanic':[1950,2030,2030],'abyssal_blade':[1320,1620,1920],
+ 'skadi':[1700,1850,2150],'daedalus':[1200,1500,1800],'greater_crit':[1340,1790,2380],
+ 'monkey_king_bar':[1720,1730,1870],'bloodstone':[1610,1610,2030],
+ 'octarine_core':[1580,1870,2200],'refresher':[1970,2050,2120],
+ 'travel_boots':[650,940,1200]};
+// hero_id инициаторов: блинк первым слотом к ~10 мин норма
+const BLINK_FIRST_IDS=[17,97,2,7,8,133,73,16,110,22,19,60,53,103,101,83,27,80,26,81];
+function timingGrade(key,t,heroId,slotOrder){
+ let k=key;
+ if(k==='blink'&&BLINK_FIRST_IDS.includes(heroId)) k='blink_initiator';
+ const th=FARM_TIMING[k]; if(!th) return null;
+ // спокойная игра: слот не первый — скидка 6 мин
+ const tt=(slotOrder&&slotOrder>1)?t-360:t;
+ if(tt<=th[0]) return ['идеал',0];
+ if(tt<=th[1]) return ['хорошо',0];
+ if(tt<=th[2]) return ['поздно',2];
  return ['провал',4];
 }
 function itemTimingsHtml(m,all,losers){
@@ -566,8 +596,10 @@ function itemTimingsHtml(m,all,losers){
  for(const p of losers){
   const pt=p.purchase_time||{};
   const notes=[];
-  const keys=Object.entries(pt).filter(([k,t])=>t>0&&(RU_ITEMS[k]||FARM_TIMING[k])).sort((a,b)=>a[1]-b[1]).slice(0,8).map(([k,t])=>{
-   const g=timingGrade(k,t);
+  const bigSorted=Object.entries(pt).filter(([k,t])=>t>0&&(RU_ITEMS[k]||FARM_TIMING[k])).sort((a,b)=>a[1]-b[1]);
+  const bigIdx={}; bigSorted.forEach(([k],i)=>{ if(FARM_TIMING[k]) bigIdx[k]=Object.keys(bigIdx).length+1; });
+  const keys=bigSorted.slice(0,8).map(([k,t])=>{
+   const g=timingGrade(k,t,p.hero_id,bigIdx[k]||1);
    const nm=itemRu(k);
    if(g&&(p.role||'').match(/Pos [123]/)) return `${nm} ${time(t)} (${g[0]})`;
    return `${nm} ${time(t)}`;
