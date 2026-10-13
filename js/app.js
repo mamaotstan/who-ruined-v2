@@ -596,8 +596,9 @@ function itemTimingsHtml(m,all,losers){
   const pt=p.purchase_time||{};
   const notes=[];
   const bigSorted=Object.entries(pt).filter(([k,t])=>t>0&&(RU_ITEMS[k]||FARM_TIMING[k])).sort((a,b)=>a[1]-b[1]);
-  const bigIdx={}; bigSorted.forEach(([k],i)=>{ if(FARM_TIMING[k]) bigIdx[k]=Object.keys(bigIdx).length+1; });
   const notBoots=k=>!['power_treads','phase_boots','arcane_boots','tranquil_boots','hand_of_midas','mask_of_madness'].includes(k);
+  // порядок считаем только среди дорогих (как в скоринге): сапоги/мидас не в счет
+  const bigIdx={}; let bi=0; bigSorted.forEach(([k])=>{ if(FARM_TIMING[k]&&notBoots(k)) bigIdx[k]=++bi; });
   const firstBig=bigSorted.find(([k])=>FARM_TIMING[k]&&notBoots(k))?.[0];
   const keys=bigSorted.slice(0,8).map(([k,t])=>{
    const g=timingGrade(k,t,p.hero_id,bigIdx[k]||1);
