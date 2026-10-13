@@ -304,6 +304,7 @@ function scorePlayer(p,c){
 
  // --- Parsed-match signals (only available after parse, m.version set) ---
  let lanePenalty = 0, tfPenalty = 0, bmPenalty = 0, feedPenalty = 0, roamPenalty = 0;
+ let itemPenalty = 0; const itemTxts = [];
  let deadPenalty = 0, goldLossPenalty = 0, bbPenalty = 0, towerPenalty = 0, denyPenalty = 0, neutPenalty = 0, fbBonus = 0;
  let zeroImpactPenalty = 0, veryLowKpPenalty = 0;
  let laneTxt = '', tfTxt = '', bmTxt = '', feedTxt = '', deadTxt = '', goldLossTxt = '';
@@ -364,6 +365,20 @@ function scorePlayer(p,c){
   }
   // 13. First blood: small credit
   if(p.firstblood_claimed) fbBonus = -1;
+  // 14. Item timings: late core slots (only for parsed matches, only cores)
+  if((role.includes('Pos 1')||role.includes('Pos 2')||role.includes('Pos 3'))){
+   const pt = p.purchase_time || {};
+   for(const [k,t] of Object.entries(pt)){
+    if(t <= 0) continue;
+    const g = (typeof timingGrade === 'function') ? timingGrade(k, t) : null;
+    if(g && g[1] > 0){
+     itemPenalty += g[1];
+     const nm = (typeof itemRu === 'function') ? itemRu(k) : k;
+     itemTxts.push(`${nm} на ${time(t)} — ${g[0]}`);
+    }
+   }
+   itemPenalty = Math.min(6, itemPenalty);
+  }
  }
  // Zero impact penalty (0 kills AND low participation) - applies to all matches
  if(kills === 0 && !role.includes('Pos 5')){
@@ -378,7 +393,7 @@ function scorePlayer(p,c){
  // Adjusted utility scaling: now 0-25 range, threshold raised to 15 for full credit
   const utilityNormalized = Math.max(0, (15 - utilityCredit) / 15);
   const raw=100*(w.farm*(farmGap/18)+w.fight*(fightPenalty/36)+w.error*(errorPenalty/26)+w.obj*(objectivePenalty/11)+w.utility*utilityNormalized);
-  const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty+deadPenalty+goldLossPenalty+bbPenalty+towerPenalty+denyPenalty+neutPenalty+fbBonus;
+  const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty+deadPenalty+goldLossPenalty+bbPenalty+towerPenalty+denyPenalty+neutPenalty+fbBonus+itemPenalty;
   const score=clamp(raw+efficiencyPenalty+parsedBonus+zeroImpactPenalty+veryLowKpPenalty,0,100);
  const confidence=clamp(55+(c.m.teamfights?12:0)+(c.m.objectives?8:0)+(p.gold_t?7:0)+(p.xp_t?5:0)+(p.roleInfo?.confidence||0)*.12,45,94);
  const reasons=[];
@@ -401,6 +416,7 @@ function scorePlayer(p,c){
  if(denyPenalty>0) reasons.push([`Мало денаев`,`Слабый контроль линии для ${role}.`]);
  if(neutPenalty>0) reasons.push([`Не фармил лес`,`Мало нейтралов для керри в долгой игре.`]);
  if(fbBonus<0) reasons.push([`Первая кровь`,`Взял FB — небольшой плюс.`]);
+ if(itemPenalty>0) reasons.push([`Поздние слоты`,`${itemTxts.slice(0,3).join('; ')}.`]);
  if(objectivePenalty>5) reasons.push([`Слабое давление на объекты`,`${fmt(p.tower_damage)} урона по строениям для ${role}.`]);
  // Enhanced utility feedback
  if(utilityCredit>=15) reasons.push([`Отличный вклад поддержки`,`Vision score ${visionScore.toFixed(1)}, поддержка команды снижает blame.`]);
@@ -524,19 +540,41 @@ function fightListHtml(m,all,losers){
  }).join('');
 }
 function impactClass(score){ if(score>=75)return "very-high"; if(score>=55)return "high"; if(score>=35)return "moderate"; if(score>=20)return "low"; return "minimal"; }
-/* --- ITEMS: key timings, late BKB, detection --- */
+/* --- ITEMS: full dict + timing grades --- */
+// Русские имена для всех значимых предметов (остальные покажем английским dname через ITEMS)
+const RU_ITEMS={'black_king_bar':'БКБ','blink':'Блинк','overwhelming_blink':'Оверблинк','swift_blink':'Свифтблинк','arcane_blink':'Арканблинк','radiance':'Радик','bfury':'БФ','manta':'Манта','abyssal_blade':'Абиссал','butterfly':'Бабочка','satanic':'Сатаник','sheepstick':'Хекс','skadi':'Скади','mjollnir':'Мьелнир','nullifier':'Нуллик','bloodthorn':'Блудторн','silver_edge':'Сильвер','greater_crit':'Дедалус','monkey_king_bar':'МКБ','desolator':'Дезоль','diffusal_blade':'Диффуза','diffusal_blade_2':'Диффуза 2','echo_sabre':'Эхо','harpoon':'Гарпун','sange_and_yasha':'СаЯ','yasha_and_kaya':'ЯКа','kaya_and_sange':'КаС','sange':'Санж','yasha':'Яша','kaya':'Кайя','aghanims_scepter':'Аганим','aghanims_shard':'Шард','octarine_core':'Октарин','refresher':'Рефрешер','heart':'Тараска','shivas_guard':'Шива','assault':'Кирас','lotus_orb':'Лотус','force_staff':'Форс','hurricane_pike':'Пика','glimmer_cape':'Глиммер','pipe':'Пайпа','crimson_guard':'Кримсон','guardian_greaves':'Гривы','mekansm':'Мека','solar_crest':'Солар','heavens_halberd':'Алебарда','travel_boots':'Травела','travel_boots_2':'Травела 2','phase_boots':'Фейзы','power_treads':'ПТ','arcane_boots':'Арканы','tranquil_boots':'Транквилы','hand_of_midas':'Мидас','mask_of_madness':'МоМ','helm_of_iron_will':'Хелм','vladmirs':'Владмир','drum_of_endurance':'Барабан','urn_of_shadows':'Урна','spirit_vessel':'Вессел','medallion_of_courage':'Медалька','buckler':'Баклер','headdress':'Хедресс','magic_wand':'Стик','magic_stick':'Стик','null_talisman':'Нуллик','wraith_band':'Врайс','bracer':'Брейсер','arcane_ring':'Аркан-ринг','vanguard':'Вангард','hood_of_defiance':'Худ','eternal_shroud':'Шрауд','blade_mail':'Блейдмейл','veil_of_discord':'Вейл','aether_lens':'Линза','dragon_lance':'Драгонленс','gungir':'Гунгир','orchid':'Орчид','cyclone':'Еул','euls_scepter_of_divinity':'Еул','ghost':'Гост','rod_of_atos':'Атос','crown':'Корона','falcon_blade':'Фалкон','orb_of_corrosion':'Коррозия','witch_blade':'Вичблейд','bloodstone':'Блудстоун','soul_booster':'Соулбустер','pers':'Перс','sphere':'Сфера','linkens_sphere':'Линка','aeon_disk':'Эон','wind_waker':'Виндвейкер','divine_rapier':'Рапира','rapier':'Рапира','gem':'Гем','ward_sentry':'Сентри','ward_observer':'Обс','smoke_of_deceit':'Смок','dust_of_appearance':'Даст','tango':'Танго','flask':'Фласка','clarity':'Кларити','branches':'Ветки','circlet':'Цирклет','gauntlets':'Перчатки','slippers':'Тапки','mantle':'Мантл','tpscroll':'ТП','town_portal_scroll':'ТП','quelling_blade':'Топорик','infused_raindrop':'Капля','orb_of_venom':'Веном','blight_stone':'Блайт','javelin':'Джавелин','broadsword':'Бродсворд','claymore':'Клеймор','mitosis_shard':'Митозис','crellas_crozier':'Крелла','helm_of_the_overlord':'Оверлорд','wraith_pact':'Пакт','boots_of_bearing':'Бэринг','moon_shard':'Муншард','disperser':'Дисперсер','ethereal_blade':'Этериал','dagon_1':'Дагон','dagon_2':'Дагон 2','dagon_3':'Дагон 3','dagon_4':'Дагон 4','dagon_5':'Дагон 5','angels_demise':'Кханда','trident':'Трайдент','devastator':'Парасма','hydras_breath':'Гидра','ultimate_scepter_2':'Благословение','diadem':'Диадема','parasma':'Парасма'};
+function itemRu(key){
+ if(RU_ITEMS[key]) return RU_ITEMS[key];
+ const it=ITEMS[key];
+ if(it&&(it.dname||it.localized_name)) return it.dname||it.localized_name;
+ return key;
+}
+// Ожидаемые тайминги фарм-слотов (сек): [идеал, хорошо, поздно]
+// После "поздно" — говно, в score идет пенальти
+const FARM_TIMING={'bfury':[720,840,960],'radiance':[900,1080,1260],'manta':[1080,1260,1440],'hand_of_midas':[300,420,540],'mask_of_madness':[480,660,840],'diffusal_blade':[720,900,1080],'echo_sabre':[600,780,960],'maelstrom':[600,780,960],'mjollnir':[1200,1440,1680],'black_king_bar':[1080,1320,1560],'aghanims_scepter':[900,1140,1380],'blink':[600,840,1080],'shadow_blade':[600,780,960],'silver_edge':[1200,1440,1680],'desolator':[720,900,1080],'crystalys':[720,900,1080],'armlet':[480,660,840],'power_treads':[360,540,720],'phase_boots':[360,540,720],'witch_blade':[600,780,960],'dragon_lance':[600,780,960],'hurricane_pike':[1080,1260,1440],'linkens_sphere':[900,1140,1380],'orchid':[600,780,960],'bloodthorn':[1200,1440,1680],'nullifier':[1200,1440,1680],'sheepstick':[1200,1500,1800],'shivas_guard':[1080,1320,1560],'heart':[1200,1500,1800],'assault':[1200,1500,1800],'butterfly':[1320,1560,1800],'satanic':[1320,1620,1920],'abyssal_blade':[1320,1620,1920],'skadi':[1200,1500,1800],'daedalus':[1200,1500,1800],'greater_crit':[1200,1500,1800],'monkey_king_bar':[1080,1320,1560],'bloodstone':[720,960,1200],'octarine_core':[1080,1320,1560],'refresher':[1440,1740,2040],'travel_boots':[1200,1500,1800]};
+function timingGrade(key,t){
+ const th=FARM_TIMING[key]; if(!th) return null;
+ if(t<=th[0]) return ['идеал',0];
+ if(t<=th[1]) return ['хорошо',0];
+ if(t<=th[2]) return ['поздно',2];
+ return ['провал',4];
+}
 function itemTimingsHtml(m,all,losers){
  if(!m.version) return '<div class="empty">Нет данных о предметах. Допарси матч.</div>';
- const KEY={'black_king_bar':'БКБ','gem':'Гем','ward_sentry':'Сентри','ward_observer':'Обс','smoke_of_deceit':'Смок','ghost':'Гост','force_staff':'Форс','lotus_orb':'Лотус','glimmer_cape':'Глиммер','pipe':'Пайпа','crimson_guard':'Кримсон','mekansm':'Мека','guardian_greaves':'Гривы','solar_crest':'Солар','heavens_halberd':'Алебарда','nullifier':'Нуллик','sheepstick':'Хекс','abyssal_blade':'Абиссал','butterfly':'Бабочка','satanic':'Сатаник','aghanims_shard':'Шард','ultimate_scepter':'Аганим','blink':'Блинк','travel_boots':'Травела','aghanims_scepter':'Аганим'};
- const intro='<div class="tfIntro">Время покупки ключевых предметов. БКБ после 25-й — поздно. Нет гемов и сентрей при инвизерах — нечем светить.</div>';
+ const intro='<div class="tfIntro">Время покупки ключевых предметов. Оценка: идеал — топовый темп, хорошо — норма, поздно — отстаешь, провал — слот не решает. Влияет на score кора.</div>';
  const rows=[];
  for(const p of losers){
   const pt=p.purchase_time||{};
   const notes=[];
+  const keys=Object.entries(pt).filter(([k,t])=>t>0&&(RU_ITEMS[k]||FARM_TIMING[k])).sort((a,b)=>a[1]-b[1]).slice(0,8).map(([k,t])=>{
+   const g=timingGrade(k,t);
+   const nm=itemRu(k);
+   if(g&&(p.role||'').match(/Pos [123]/)) return `${nm} ${time(t)} (${g[0]})`;
+   return `${nm} ${time(t)}`;
+  }).join(' · ');
   if(pt.black_king_bar&&pt.black_king_bar>25*60) notes.push(`позднее БКБ ${time(pt.black_king_bar)} — драки до него игрались без защиты`);
   if(pt.gem===undefined&&pt.ward_sentry===undefined&&(p.sen_placed||0)<2) notes.push('нет детекшена — инвизеров нечем светить');
   if(!pt.smoke_of_deceit) notes.push('не покупал смок — не было внезапных гангов');
-  const keys=Object.entries(pt).filter(([k,t])=>KEY[k]&&t>0).sort((a,b)=>a[1]-b[1]).slice(0,6).map(([k,t])=>`${KEY[k]} на ${time(t)}`).join(' · ');
   if(keys||notes.length) rows.push(`<div class="itRow"><img class="heroIcon sm" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div><b>${esc(p.personaname||'?')}</b><span>${esc(heroName(p))}</span><small>${esc(keys||'ключевых покупок нет')}</small>${notes.length?`<em>Вывод: ${esc(notes.join('; '))}</em>`:''}</div></div>`);
  }
  return intro+(rows.length?rows.join(''):'<div class="empty">Покупки не найдены.</div>');
