@@ -1,4 +1,4 @@
-// Steam link: no OAuth on static hosting (OpenDota has no /api/auth/steam).
+// Steam link: static hosting cannot do Steam OpenID (needs a server).
 // User pastes SteamID64 / profile URL / nickname, we resolve to account_id via OpenDota API.
 async function resolveSteam(input) {
   const s = (input || '').trim();
