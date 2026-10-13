@@ -22,53 +22,79 @@
   </header>
 
   <section id="result" class="hidden">
-    <div class="verdict">
-      <div class="eyebrow">VERDICT</div>
-      <div class="verdict-grid">
-        <div>
-          <div class="verdictHero"><img id="culpritHero" src="" alt=""></div><div class="verdictRank"><img id="culpritRank" src="" alt=""><span id="culpritRankText">—</span></div>
-          <h2 id="culpritName">—</h2>
-          <div class="impact"><span class="impactLabel">Влияние на поражение</span><b id="culpritScore" class="impactValue">—</b></div>
-          <div id="confidence" class="confidence">Confidence —</div>
+    <!-- TWO COLUMN LAYOUT: Primary (verdict + story) LEFT, Secondary (stats) RIGHT -->
+    <div class="mainGrid">
+      
+      <!-- LEFT COLUMN: Primary content -->
+      <div class="primaryCol">
+        
+        <!-- Verdict card -->
+        <div class="verdict">
+          <div class="eyebrow">VERDICT</div>
+          <div class="verdict-grid">
+            <div>
+              <div class="verdictHero"><img id="culpritHero" src="" alt=""></div><div class="verdictRank"><img id="culpritRank" src="" alt=""><span id="culpritRankText">—</span></div>
+              <h2 id="culpritName">—</h2>
+              <div class="impact"><span class="impactLabel">Влияние на поражение</span><b id="culpritScore" class="impactValue">—</b></div>
+              <div id="confidence" class="confidence">Confidence —</div>
+            </div>
+            <div id="summary" class="summary"></div>
+          </div>
+          <div class="nearRuiner" id="nearRuiner"></div>
         </div>
-        <div id="summary" class="summary"></div>
+
+        <!-- Match story: phases + turning point -->
+        <div class="panel storyPanel">
+          <div class="panel-title">Как развивалась игра</div>
+          <div id="matchStory"></div>
+        </div>
+
+        <!-- Team report: per-player breakdown -->
+        <div class="panel">
+          <div class="panel-title">Разбор каждого игрока · ошибки и что делать</div>
+          <div id="teamReport"></div>
+        </div>
+
+        <!-- Why this player? -->
+        <div class="panel">
+          <div class="panel-title">Почему именно он?</div>
+          <div id="reasons" class="reasons"></div>
+        </div>
+
       </div>
-      <div class="nearRuiner" id="nearRuiner"></div>
+
+      <!-- RIGHT COLUMN: Secondary stats -->
+      <div class="secondaryCol">
+        
+        <!-- Quick stats -->
+        <div class="panel"><div class="panel-title">Матч в цифрах</div><div id="matchOverview"></div></div>
+
+        <!-- Winner team -->
+        <div class="panel winnerPanel"><div class="panel-title">Победившая команда · <span id="winnerTeamName">—</span></div><div id="winnerTeam"></div></div>
+
+        <!-- Key events -->
+        <div class="panel">
+          <div class="panel-title">Ключевые эпизоды</div>
+          <div id="events"></div>
+        </div>
+
+        <!-- Losing team stats -->
+        <div class="panel">
+          <div class="panel-title">Игроки проигравшей команды · стата</div>
+          <div id="players"></div>
+        </div>
+
+      </div>
+
     </div>
 
-    <div class="panel wide"><div class="panel-title">Матч в цифрах</div><div id="matchOverview"></div></div>
-    <div class="panel wide winnerPanel"><div class="panel-title">Победившая команда · <span id="winnerTeamName">—</span></div><div id="winnerTeam"></div></div>
-    <div class="panel wide storyPanel">
-      <div class="panel-title">Как развивалась игра</div>
-      <div id="matchStory"></div>
-    </div>
-
-    <div class="panel wide">
-        <div class="panel-title">Разбор каждого игрока · ошибки и что делать</div>
-        <div id="teamReport"></div>
-      </div>
-
+    <!-- FULL WIDTH PANELS BELOW -->
     <div class="panel wide"><div class="panel-title">Экономика матча · кто вел и где залили</div><div id="ecoChart"></div></div>
     <div class="panel wide"><div class="panel-title">Драки · кто что дал</div><div id="fightList"></div></div>
     <div class="panel wide"><div class="panel-title">Команда · предметы, вижен, смоки</div><div id="itemTimings"></div><div id="visionMap"></div><div id="smokeInfo"></div></div>
     <div class="panel wide"><div class="panel-title">Драфт · пики и баны</div><div id="draftInfo"></div></div>
     <div class="panel wide"><div class="panel-title">История игрока</div><div id="profileBox"></div></div>
 
-      <div class="grid">
-      <div class="panel wide">
-        <div class="panel-title">Игроки проигравшей команды · стата</div>
-        <div id="players"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-title">Ключевые эпизоды</div>
-        <div id="events"></div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-title">Почему именно он?</div>
-      <div id="reasons" class="reasons"></div>
-    </div>
   </section>
 </main>
 <script src="js/app.js"></script>

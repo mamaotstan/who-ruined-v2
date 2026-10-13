@@ -430,6 +430,7 @@ function render(m,all,players,culprit,closeRuiner){
  $("visionMap").innerHTML=visionHtml(m,all,players);
  $("draftInfo").innerHTML=draftHtml(m,all);
  $("smokeInfo").innerHTML=smokeHtml(m,all,players);
+ $("matchStory").innerHTML=matchStory(m,all,players,culprit);
  const events=buildEvents(m,culprit); $("events").innerHTML=events.length?events.map(e=>`<div class="event ${e.danger?'danger':''}"><div class="eventTop"><span class="eventTime">${e.t}</span><span class="eventTag ${e.danger?'bad':''}">${e.danger?'НЕГАТИВНЫЙ СИГНАЛ':'ПОЛОЖИТЕЛЬНЫЙ СИГНАЛ'}</span></div><div class="eventPlayer"><img src="${e.player?.img||''}" alt="" onerror="this.style.visibility='hidden'"><div><strong>${esc(e.player?.name||'Игрок')}</strong><span>${esc(e.player?.hero||'Герой')}</span></div></div><b>${esc(e.title)}</b><div class="eventWhat"><strong>Что произошло:</strong> ${esc(e.text)}</div><div class="eventWhy"><strong>Почему это важно:</strong> ${esc(e.why)}</div></div>`).join(""):`<div class="empty">Для этого матча parsed event data недостаточно.</div>`;
  $("reasons").innerHTML=culprit.reasons.map(r=>`<div class="reason"><strong>+ ${esc(r[0])}</strong><span>${esc(r[1])}</span></div>`).join("");
 }
