@@ -24,6 +24,7 @@ $("form").addEventListener("submit",async e=>{
   } else {
    await await analyze(m); $("status").textContent=`Матч ${id} обработан`;
   }
+  saveHist(id); location.hash='match='+id;
  }catch(err){$("status").textContent="Ошибка: "+err.message}
 });
 
@@ -401,6 +402,12 @@ function render(m,all,players,culprit,closeRuiner){
  $("winnerTeam").innerHTML=winningPlayers.map(p=>winnerPlayerCard(p)).join("");
  $("players").innerHTML=players.map((p)=>playerCard(p,p===culprit)).join("");
  $("teamReport").innerHTML=teamReportHtml(players);
+ $("ecoChart").innerHTML=ecoChartHtml(m,all);
+ $("fightList").innerHTML=fightListHtml(m,all,players);
+ $("itemTimings").innerHTML=itemTimingsHtml(m,all,players);
+ $("visionMap").innerHTML=visionHtml(m,all,players);
+ $("draftInfo").innerHTML=draftHtml(m,all);
+ $("smokeInfo").innerHTML=smokeHtml(m,all,players);
  const events=buildEvents(m,culprit); $("events").innerHTML=events.length?events.map(e=>`<div class="event ${e.danger?'danger':''}"><div class="eventTop"><span class="eventTime">${e.t}</span><span class="eventTag ${e.danger?'bad':''}">${e.danger?'НЕГАТИВНЫЙ СИГНАЛ':'ПОЛОЖИТЕЛЬНЫЙ СИГНАЛ'}</span></div><div class="eventPlayer"><img src="${e.player?.img||''}" alt="" onerror="this.style.visibility='hidden'"><div><strong>${esc(e.player?.name||'Игрок')}</strong><span>${esc(e.player?.hero||'Герой')}</span></div></div><b>${esc(e.title)}</b><div class="eventWhat"><strong>Что произошло:</strong> ${esc(e.text)}</div><div class="eventWhy"><strong>Почему это важно:</strong> ${esc(e.why)}</div></div>`).join(""):`<div class="empty">Для этого матча parsed event data недостаточно.</div>`;
  $("reasons").innerHTML=culprit.reasons.map(r=>`<div class="reason"><strong>+ ${esc(r[0])}</strong><span>${esc(r[1])}</span></div>`).join("");
 }
@@ -443,8 +450,98 @@ function metricLine(label,value,detail){return `<div class="vmetric"><span>${esc
 function teamReportHtml(players){
  return players.map((p,i)=>playerReportCard(p,i)).join('');
 }
+/* --- ECO CHART: gold/xp advantage over time, SVG --- */
+function ecoChartHtml(m,all){
+ const gold=m.radiant_gold_adv||[], xp=m.radiant_xp_adv||[];
+ if(!gold.length) return '<div class="empty">Нет данных экономики. Допарси матч для графика.</div>';
+ const loseTeam=m.radiant_win?'Dire':'Radiant';
+ const W=560,H=180,P=28;
+ const n=gold.length;
+ const allV=gold.concat(xp.length?xp:[0]);
+ const mx=Math.max(1000,...allV.map(Math.abs));
+ const X=i=>P+(W-2*P)*i/Math.max(1,n-1);
+ const Y=v=>H/2-(H/2-P*0.6)*v/mx;
+ const line=(arr,color)=>`<polyline fill="none" stroke="${color}" stroke-width="2" points="${arr.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}"/>`;
+ // teamfight markers
+ const dur=m.duration||1;
+ const marks=(m.teamfights||[]).map(f=>{
+  const x=X((f.start||0)/60);
+  return `<line x1="${x.toFixed(1)}" y1="8" x2="${x.toFixed(1)}" y2="${H-8}" stroke="#ff4545" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/><text x="${x.toFixed(1)}" y="${H-2}" font-size="8" fill="#ff8a8a" text-anchor="middle">${time(f.start||0)}</text>`;
+ }).join('');
+ // max throw / comeback
+ let peak=Math.max(...gold), trough=Math.min(...gold);
+ const verdict=m.throw?`Залито преимущество ${fmt(m.loss)} (throw ${m.throw})`:(peak>5000&&gold[n-1]<peak*0.3)?`Было +${fmt(peak)} за Radiant, к концу ${fmt(gold[n-1])}`:'Без резкого камбэка по золоту';
+ return `<div class="ecoWrap"><svg viewBox="0 0 ${W} ${H}" class="ecoSvg"><line x1="${P}" y1="${H/2}" x2="${W-P}" y2="${H/2}" stroke="#3a3f47" stroke-width="1"/>${line(gold,'#4b91f7')}${xp.length?line(xp,'#78d39a'):''}${marks}<text x="${P+2}" y="14" font-size="9" fill="#4b91f7">золото</text>${xp.length?`<text x="${P+52}" y="14" font-size="9" fill="#78d39a">опыт</text>`:''}<text x="${W-P}" y="14" font-size="9" fill="#8a8e98" text-anchor="end">пик ${fmt(peak)} / яма ${fmt(trough)}</text></svg><div class="ecoVerdict">${esc(verdict)} · проигравшие: ${loseTeam}</div></div>`;
+}
 function impactLabel(score){ if(score>=75)return "Очень высокое"; if(score>=55)return "Высокое"; if(score>=35)return "Умеренное"; if(score>=20)return "Небольшое"; return "Низкое"; }
+/* --- FIGHTS: per-teamfight breakdown --- */
+function fightListHtml(m,all,losers){
+ const tfs=m.teamfights||[];
+ if(!tfs.length) return '<div class="empty">Нет данных о драках. Допарси матч.</div>';
+ const loseTeam=m.radiant_win?'Dire':'Radiant';
+ const slot2p={}; for(const p of all) slot2p[p.player_slot]=p;
+ const order=[...all].sort((a,b)=>a.player_slot-b.player_slot);
+ return tfs.map((f,fi)=>{
+  const rows=order.map((p,i)=>{
+   const x=(f.players||[])[i]||{};
+   const dmg=x.damage||0, d=x.deaths||0, k=Object.keys(x.killed||{}).length;
+   const isLoser=p.team===loseTeam;
+   const zeroF=d>0&&dmg<300;
+   return `<div class="tfRow ${isLoser?'loser':''} ${zeroF?'zerof':''}"><span>${esc(slot2p[p.player_slot]?.personaname||'?')}</span><span>${esc(heroName(p))}</span><b>${fmt(dmg)}</b><span>${d?d+'☠':''}${k?k+'⚔':''}${x.buybacks?'ББ':''}</span></div>`;
+  }).join('');
+  return `<div class="tfCard"><div class="tfHead"><b>Драка ${fi+1}</b><span>${time(f.start||0)}–${time(f.end||0)} · смертей: ${f.deaths||0}</span></div><div class="tfRows">${rows}</div></div>`;
+ }).join('');
+}
 function impactClass(score){ if(score>=75)return "very-high"; if(score>=55)return "high"; if(score>=35)return "moderate"; if(score>=20)return "low"; return "minimal"; }
+/* --- ITEMS: key timings, late BKB, detection --- */
+function itemTimingsHtml(m,all,losers){
+ if(!m.version) return '<div class="empty">Нет данных о предметах. Допарси матч.</div>';
+ const KEY={'black_king_bar':'БКБ','gem':'Гем','ward_sentry':'Сентри','ward_observer':'Обс','smoke_of_deceit':'Смок','ghost':'Гост','force_staff':'Форс','lotus_orb':'Лотус','glimmer_cape':'Глиммер','pipe':'Пайпа','crimson_guard':'Кримсон','mekansm':'Мека','guardian_greaves':'Гривы','solar_crest':'Солар','heavens_halberd':'Алебарда','nullifier':'Нуллик','sheepstick':'Хекс','abyssal_blade':'Абиссал','butterfly':'Бабочка','satanic':'Сатаник','aghanims_shard':'Шард','ultimate_scepter':'Аганим','blink':'Блинк','travel_boots':'Травела','aghanims_scepter':'Аганим'};
+ const rows=[];
+ for(const p of losers){
+  const pt=p.purchase_time||{};
+  const notes=[];
+  if(pt.black_king_bar&&pt.black_king_bar>25*60) notes.push(`позднее БКБ ${time(pt.black_king_bar)}`);
+  const invi=m.picks_bans&&JSON.stringify(m.picks_bans).match(/riki|weaver|nyx|clinkz|bounty|mirana|invis/i);
+  if(pt.gem===undefined&&pt.ward_sentry===undefined&&(p.sen_placed||0)<2) notes.push('нет детекшена');
+  if(!pt.smoke_of_deceit) notes.push('не покупал смок');
+  const keys=Object.entries(pt).filter(([k,t])=>KEY[k]&&t>0).sort((a,b)=>a[1]-b[1]).slice(0,6).map(([k,t])=>`${KEY[k]} ${time(t)}`).join(' · ');
+  if(keys||notes.length) rows.push(`<div class="itRow"><img class="heroIcon sm" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div><b>${esc(p.personaname||'?')}</b><span>${esc(heroName(p))}</span><small>${esc(keys||'нет ключевых покупок')}</small>${notes.length?`<em>${esc(notes.join('; '))}</em>`:''}</div></div>`);
+ }
+ return rows.length?rows.join(''):'<div class="empty">Покупки не найдены.</div>';
+}
+/* --- VISION: wards/dewards scoreboard --- */
+function visionHtml(m,all,losers){
+ if(!m.version) return '<div class="empty">Нет данных вижена. Допарси матч.</div>';
+ const rows=[...losers].sort((a,b)=>((b.obs_placed||0)+(b.sen_placed||0))-((a.obs_placed||0)+(a.sen_placed||0))).map(p=>
+  `<div class="visRow"><img class="heroIcon sm" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div><b>${esc(p.personaname||'?')}</b><span>${esc(heroName(p))}</span></div><div class="visNums"><span title="обсы">👁 ${p.obs_placed||0}</span><span title="сентри">🔹 ${p.sen_placed||0}</span><span title="деварды">💥 ${(p.observer_kills||0)+(p.sentry_kills||0)}</span><span title="стаки">📦 ${p.camps_stacked||0}</span></div></div>`
+ ).join('');
+ const tot=losers.reduce((a,p)=>a+(p.obs_placed||0)+(p.sen_placed||0),0);
+ return `<div class="visTot">Всего вардов у проигравших: <b>${tot}</b></div>${rows}`;
+}
+/* --- DRAFT: picks/bans order --- */
+function draftHtml(m,all){
+ const pb=m.picks_bans||[];
+ if(!pb.length) return '<div class="empty">Нет данных драфта.</div>';
+ return `<div class="draftRows">${pb.map((x,i)=>{
+  const h=x.hero_id?`<img title="${esc((HEROES[String(x.hero_id)]||{}).localized_name||'')}" src="https://cdn.cloudflare.steamstatic.com${(HEROES[String(x.hero_id)]||{}).img||''}" onerror="this.style.visibility='hidden'">`:'<span class="ban">бан</span>';
+  return `<div class="draftCell ${x.is_pick?'pick':'ban'} ${x.team?'dire':'rad'}"><small>${i+1}</small>${h}</div>`;
+ }).join('')}</div><div class="draftLegend"><span class="rad">■ Radiant</span> <span class="dire">■ Dire</span></div>`;
+}
+/* --- SMOKE/RUNES: bought vs kills, rune control --- */
+function smokeHtml(m,all,losers){
+ if(!m.version) return '<div class="empty">Нет данных. Допарси матч.</div>';
+ const rows=losers.map(p=>{
+  const bought=(p.purchase_log||[]).filter(x=>x.key==='smoke_of_deceit'&&x.time>=0);
+  const kills=(p.kills_log||[]);
+  const eff=bought.map(s=>{
+   const k=kills.filter(k=>k.time>s.time&&k.time<s.time+90).length;
+   return `${time(s.time)}${k?' ⚔x'+k:' · мимо'}`;
+  }).join('; ');
+  return `<div class="smRow"><img class="heroIcon sm" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div><b>${esc(p.personaname||'?')}</b><span>${esc(heroName(p))}</span><small>Смоки: ${bought.length?esc(eff):'не брал'} · Руны: ${p.rune_pickups||0} · Стаки: ${p.camps_stacked||0} · Курьеры убил: ${p.courier_kills||0}</small></div></div>`;
+ }).join('');
+ return rows;
+}
 function verdictText(m,p,r){
  const gap=r?Math.max(0,p.score-r.score):0;
  const lead= r && gap>=8 ? `Он заметно оторвался от следующего игрока по модели: ${gap} баллов.` : r ? `Разрыв с ближайшим по score игроком небольшой — всего ${gap} баллов, поэтому матч нельзя сводить к одной цифре.` : `Для сравнения доступен только основной результат модели.`;
@@ -607,3 +704,48 @@ function buildEvents(m,p){
  }
  return derived.slice(0,5);
 }
+/* --- PROFILE: last matches by nickname --- */
+async function loadProfile(){
+ const nick=($("nickInput").value||'').trim(); if(!nick)return;
+ const box=$("profileBox");
+ try{
+  box.innerHTML='Ищем игрока…';
+  const s=await fetch(`${API}/search?q=${encodeURIComponent(nick)}`);
+  const arr=await s.json();
+  if(!arr||!arr.length){box.innerHTML='Игрок не найден.';return;}
+  const acc=arr[0];
+  const mr=await fetch(`${API}/players/${acc.account_id}/matches?limit=8`);
+  const matches=await mr.json();
+  if(!matches||!matches.length){box.innerHTML='Матчей нет.';return;}
+  let w=0,l=0,k=0,d=0,a=0,gpm=0;
+  const rows=matches.map(mm=>{
+   const win=(mm.radiant_win&&mm.player_slot<128)||(!mm.radiant_win&&mm.player_slot>=128);
+   win?w++:l++;
+   k+=mm.kills||0;d+=mm.deaths||0;a+=mm.assists||0;gpm+=mm.gold_per_min||0;
+   return `<div class="pmRow ${win?'win':'lose'}" data-mid="${mm.match_id}"><span>${win?'✅':'❌'}</span><b>${mm.match_id}</b><span>${esc((HEROES[String(mm.hero_id)]||{}).localized_name||'#'+mm.hero_id)}</span><span>${mm.kills}/${mm.deaths}/${mm.assists}</span><span>${time(mm.duration||0)}</span></div>`;
+  }).join('');
+  const n=matches.length;
+  box.innerHTML=`<div class="pmHead"><b>${esc(acc.personaname||nick)}</b><span>последние ${n}: ${w}W–${l}L · средний KDA ${(k/n).toFixed(1)}/${(d/n).toFixed(1)}/${(a/n).toFixed(1)} · GPM ${Math.round(gpm/n)}</span>${d/n>7?'<em>Стабильно много смертей — смотри позиционку и карту.</em>':''}${(k+a)/Math.max(1,d/n)<2?'<em>Низкий импакт на киллы — играй ближе к команде.</em>':''}</div>${rows}<div class="hint">Клик по матчу — открыть разбор.</div>`;
+  box.querySelectorAll('.pmRow').forEach(r=>r.onclick=()=>{location.hash='match='+r.dataset.mid;$("matchId").value=r.dataset.mid;$("form").dispatchEvent(new Event('submit'));window.scrollTo(0,0);});
+ }catch(e){box.innerHTML='Ошибка: '+e.message;}
+}
+function saveHist(id){
+ try{
+  let h=JSON.parse(localStorage.getItem('wr_hist')||'[]');
+  h=[id,...h.filter(x=>x!==id)].slice(0,8);
+  localStorage.setItem('wr_hist',JSON.stringify(h));
+  renderHist();
+ }catch(e){}
+}
+function renderHist(){
+ const el=$("histRow"); if(!el)return;
+ let h=[]; try{h=JSON.parse(localStorage.getItem('wr_hist')||'[]');}catch(e){}
+ el.innerHTML=h.length?'Последние: '+h.map(id=>`<button type="button" data-mid="${id}">${id}</button>`).join(''):'';
+ el.querySelectorAll('button').forEach(b=>b.onclick=()=>{$("matchId").value=b.dataset.mid;$("form").dispatchEvent(new Event('submit'));});
+}
+window.addEventListener('DOMContentLoaded',()=>{
+ renderHist();
+ const nb=$("nickBtn"); if(nb)nb.onclick=loadProfile;
+ const hsh=(location.hash||'').match(/match=(\d+)/);
+ if(hsh){$("matchId").value=hsh[1];$("form").dispatchEvent(new Event('submit'));}
+});

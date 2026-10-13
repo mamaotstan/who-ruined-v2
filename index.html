@@ -16,6 +16,8 @@
       <input id="matchId" inputmode="numeric" placeholder="Введи Match ID" required>
       <button>АНАЛИЗИРОВАТЬ</button>
     </form>
+    <div id="nickRow" class="nickRow"><input id="nickInput" placeholder="Ник для истории матчей (необязательно)"><button id="nickBtn" type="button">История</button></div>
+    <div id="histRow" class="histRow"></div>
     <a class="telegram" href="https://t.me/chinasd787" target="_blank" rel="noopener noreferrer"><span class="telegramIcon">➤</span> Открыть Telegram</a><span class="authorCaption">автор проекта · Telegram</span><div id="status" class="status"></div>
   </header>
 
@@ -45,6 +47,16 @@
         <div class="panel-title">Разбор каждого игрока · ошибки и что делать</div>
         <div id="teamReport"></div>
       </div>
+
+    <div class="panel wide"><div class="panel-title">Экономика матча · золото и опыт</div><div id="ecoChart"></div></div>
+    <div class="panel wide"><div class="panel-title">Драки · кто что дал</div><div id="fightList"></div></div>
+    <div class="grid2">
+      <div class="panel"><div class="panel-title">Предметы · тайминги</div><div id="itemTimings"></div></div>
+      <div class="panel"><div class="panel-title">Вижен · варды и деварды</div><div id="visionMap"></div></div>
+      <div class="panel"><div class="panel-title">Драфт · пики и баны</div><div id="draftInfo"></div></div>
+      <div class="panel"><div class="panel-title">Смоки и руны</div><div id="smokeInfo"></div></div>
+    </div>
+    <div class="panel wide"><div class="panel-title">История игрока</div><div id="profileBox"></div></div>
 
       <div class="grid">
       <div class="panel wide">
