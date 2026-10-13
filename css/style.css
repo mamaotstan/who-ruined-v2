@@ -311,6 +311,10 @@ h1 span{background:linear-gradient(135deg,#ef4444,#dc2626);-webkit-background-cl
 }
 
 /* Steam auth buttons */
+#steamLoggedOut{display:flex;gap:8px;flex:1}
+#steamInput{flex:1;background:rgba(8,13,22,.78);border:1px solid rgba(100,120,150,.3);color:#fff;border-radius:10px;padding:11px;font-size:13px;outline:0;min-width:220px}
+#steamLoggedIn{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#steamName{font-weight:800;font-size:13px}
 .steamAuth{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
 .steamBtn{border:0;border-radius:10px;background:#3b82f6;color:#fff;font-weight:800;padding:11px 18px;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:.2s}
 .steamBtn:hover{background:#2563eb;transform:translateY(-1px)}

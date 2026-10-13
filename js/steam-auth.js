@@ -1,77 +1,92 @@
-// Steam OAuth login
-const STEAM_RETURN_URL = window.location.origin + '/';
-const OPENDOTA_AUTH = 'https://api.opendota.com/api/auth/steam';
-
-function initSteamAuth() {
-  const params = new URLSearchParams(window.location.search);
-  const accountId = params.get('account_id');
-  
-  if (accountId) {
-    // User returned from Steam OAuth
-    localStorage.setItem('steam_account_id', accountId);
-    showLoggedIn(accountId);
-    // Clean URL
-    window.history.replaceState({}, document.title, '/');
-  } else {
-    // Check if already logged in
-    const savedId = localStorage.getItem('steam_account_id');
-    if (savedId) {
-      showLoggedIn(savedId);
+// Steam link: no OAuth on static hosting (OpenDota has no /api/auth/steam).
+// User pastes SteamID64 / profile URL / nickname, we resolve to account_id via OpenDota API.
+async function resolveSteam(input) {
+  const s = (input || '').trim();
+  if (!s) return null;
+  // 1. direct numeric account_id or steam64
+  const digits = s.match(/(\d{5,})/);
+  if (digits) {
+    let id = digits[1];
+    // steam64 (17 digits starting with 7656) -> account_id = steam64 - 76561197960265728
+    if (id.length >= 16 && id.startsWith('7656')) {
+      try { id = String(BigInt(id) - BigInt('76561197960265728')); } catch (e) {}
     }
+    // verify via players endpoint
+    try {
+      const r = await fetch(`${API}/players/${id}`);
+      if (r.ok) {
+        const p = await r.json();
+        if (p && (p.profile || p.mmr_estimate)) return { id, name: p.profile?.personaname || ('Player ' + id) };
+      }
+    } catch (e) {}
+  }
+  // 2. nickname search
+  try {
+    const r = await fetch(`${API}/search?q=${encodeURIComponent(s)}`);
+    if (r.ok) {
+      const arr = await r.json();
+      if (arr && arr.length) return { id: String(arr[0].account_id), name: arr[0].personaname || s };
+    }
+  } catch (e) {}
+  return null;
+}
+
+function showSteamState() {
+  const out = $("steamLoggedOut"), inn = $("steamLoggedIn");
+  if (!out || !inn) return;
+  const saved = localStorage.getItem('steam_account_id');
+  const savedName = localStorage.getItem('steam_account_name');
+  if (saved) {
+    out.classList.add("hidden");
+    inn.classList.remove("hidden");
+    const nm = $("steamName");
+    if (nm) nm.textContent = '🎮 ' + (savedName || ('Player ' + saved));
+  } else {
+    out.classList.remove("hidden");
+    inn.classList.add("hidden");
   }
 }
 
-function loginSteam() {
-  window.location.href = `${OPENDOTA_AUTH}?return_url=${encodeURIComponent(STEAM_RETURN_URL)}`;
+async function bindSteam() {
+  const inp = $("steamInput"), st = $("steamStatus");
+  const v = inp ? inp.value : '';
+  if (st) st.textContent = 'Ищем профиль…';
+  const found = await resolveSteam(v);
+  if (found) {
+    localStorage.setItem('steam_account_id', found.id);
+    localStorage.setItem('steam_account_name', found.name);
+    showSteamState();
+    if (st) st.textContent = 'Привязан: ' + found.name;
+  } else {
+    if (st) st.textContent = 'Не нашли. Вставь SteamID64 (цифры из ссылки на профиль) или точный ник.';
+  }
 }
 
-function logoutSteam() {
+function unbindSteam() {
   localStorage.removeItem('steam_account_id');
-  location.reload();
+  localStorage.removeItem('steam_account_name');
+  showSteamState();
+  const st = $("steamStatus");
+  if (st) st.textContent = '';
 }
 
-async function showLoggedIn(accountId) {
-  const loginBtn = $("steamLogin");
-  const logoutBtn = $("steamLogout");
-  const recentBtn = $("steamRecent");
-  
-  if (!loginBtn || !logoutBtn || !recentBtn) return;
-  
-  loginBtn.classList.add("hidden");
-  logoutBtn.classList.remove("hidden");
-  recentBtn.classList.remove("hidden");
-  
-  try {
-    const res = await fetch(`${API}/players/${accountId}`);
-    if (res.ok) {
-      const player = await res.json();
-      const name = player.profile?.personaname || `Player ${accountId}`;
-      logoutBtn.textContent = `Выйти (${name})`;
-    }
-  } catch(e) {}
-}
+async function showLoggedIn() { showSteamState(); }
 
 async function loadRecentMatches() {
   const accountId = localStorage.getItem('steam_account_id');
   if (!accountId) {
-    alert('Сначала войди через Steam');
+    const st = $("steamStatus");
+    if (st) st.textContent = 'Сначала привяжи Steam выше.';
     return;
   }
-  
   const box = $("profileBox");
   if (!box) return;
-  
   try {
     box.innerHTML = 'Загружаем последние матчи…';
     const res = await fetch(`${API}/players/${accountId}/matches?limit=10`);
     if (!res.ok) throw Error('Не удалось загрузить матчи');
-    
     const matches = await res.json();
-    if (!matches || !matches.length) {
-      box.innerHTML = 'Матчей не найдено.';
-      return;
-    }
-    
+    if (!matches || !matches.length) { box.innerHTML = 'Матчей не найдено.'; return; }
     let w = 0, l = 0;
     const rows = matches.map(m => {
       const win = (m.radiant_win && m.player_slot < 128) || (!m.radiant_win && m.player_slot >= 128);
@@ -79,9 +94,7 @@ async function loadRecentMatches() {
       const heroName = (HEROES[String(m.hero_id)] || {}).localized_name || `#${m.hero_id}`;
       return `<div class="pmRow ${win?'win':'lose'}" data-mid="${m.match_id}"><span>${win?'✅':'❌'}</span><b>${m.match_id}</b><span>${esc(heroName)}</span><span>${m.kills}/${m.deaths}/${m.assists}</span><span>${time(m.duration||0)}</span></div>`;
     }).join('');
-    
     box.innerHTML = `<div class="pmHead"><b>Последние ${matches.length} матчей</b><span>${w}W–${l}L</span></div>${rows}<div class="hint">Клик по матчу — открыть разбор.</div>`;
-    
     box.querySelectorAll('.pmRow').forEach(r => {
       r.onclick = () => {
         location.hash = 'match=' + r.dataset.mid;
@@ -90,30 +103,16 @@ async function loadRecentMatches() {
         window.scrollTo(0, 0);
       };
     });
-    
-  } catch(e) {
-    box.innerHTML = 'Ошибка: ' + e.message;
-  }
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch(e) { box.innerHTML = 'Ошибка: ' + e.message; }
 }
 
-// Add to DOMContentLoaded
-window.addEventListener('DOMContentLoaded', () => {
-  initSteamAuth();
-  
-  const loginBtn = $("steamLogin");
-  const logoutBtn = $("steamLogout");
-  const recentBtn = $("steamRecent");
-  
-  if (loginBtn) loginBtn.onclick = loginSteam;
-  if (logoutBtn) logoutBtn.onclick = logoutSteam;
-  if (recentBtn) recentBtn.onclick = loadRecentMatches;
-  
-  renderHist();
-  const nb = $("nickBtn");
-  if (nb) nb.onclick = loadProfile;
-  const hsh = (location.hash || '').match(/match=(\d+)/);
-  if (hsh) {
-    $("matchId").value = hsh[1];
-    $("form").dispatchEvent(new Event('submit'));
-  }
-});
+// single DOMContentLoaded owner is app.js; expose init called from there
+function initSteamBox() {
+  showSteamState();
+  const sv = $("steamSave"); if (sv) sv.onclick = bindSteam;
+  const lo = $("steamLogout"); if (lo) lo.onclick = unbindSteam;
+  const rc = $("steamRecent"); if (rc) rc.onclick = loadRecentMatches;
+  const inp = $("steamInput");
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); bindSteam(); } });
+}

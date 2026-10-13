@@ -18,10 +18,17 @@
     </form>
     <div id="nickRow" class="nickRow"><input id="nickInput" placeholder="Ник для истории матчей (необязательно)"><button id="nickBtn" type="button">История</button></div>
     <div id="histRow" class="histRow"></div>
-    <div class="steamAuth">
-      <button id="steamLogin" class="steamBtn">🎮 Войти через Steam</button>
-      <button id="steamLogout" class="steamBtn hidden">Выйти</button>
-      <button id="steamRecent" class="steamBtn secondary hidden">Мои последние матчи</button>
+    <div class="steamAuth" id="steamBox">
+      <div id="steamLoggedOut">
+        <input id="steamInput" placeholder="SteamID64 / ссылка на профиль / ник">
+        <button id="steamSave" class="steamBtn">Привязать Steam</button>
+      </div>
+      <div id="steamLoggedIn" class="hidden">
+        <span id="steamName"></span>
+        <button id="steamRecent" class="steamBtn secondary">Мои последние матчи</button>
+        <button id="steamLogout" class="steamBtn">Отвязать</button>
+      </div>
+      <div id="steamStatus" class="hint"></div>
     </div>
     <a class="telegram" href="https://t.me/chinasd787" target="_blank" rel="noopener noreferrer"><span class="telegramIcon">➤</span> Открыть Telegram</a><span class="authorCaption">автор проекта · Telegram</span><div id="status" class="status"></div>
   </header>

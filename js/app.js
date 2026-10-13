@@ -778,6 +778,7 @@ function renderHist(){
 window.addEventListener('DOMContentLoaded',()=>{
  renderHist();
  const nb=$("nickBtn"); if(nb)nb.onclick=loadProfile;
+ if(typeof initSteamBox==='function') initSteamBox();
  const hsh=(location.hash||'').match(/match=(\d+)/);
  if(hsh){$("matchId").value=hsh[1];$("form").dispatchEvent(new Event('submit'));}
 });
