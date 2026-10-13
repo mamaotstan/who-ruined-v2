@@ -365,22 +365,19 @@ function scorePlayer(p,c){
   }
   // 13. First blood: small credit
   if(p.firstblood_claimed) fbBonus = -1;
-  // 14. Item timings: late core slots (only for parsed matches, only cores)
-  // order = номер большого слота: считаем крупные покупки по времени
+  // 14. Первый кор-слот: только самый первый большой предмет. Остальной билд не оцениваем — там слишком много вариантов.
   if((role.includes('Pos 1')||role.includes('Pos 2')||role.includes('Pos 3'))){
    const pt = p.purchase_time || {};
-   const bigOrder = Object.entries(pt).filter(([k,t])=>t>0&&FARM_TIMING[k]).sort((a,b)=>a[1]-b[1]);
-   const orderOf = {}; bigOrder.forEach(([k],i)=>{ orderOf[k]=i+1; });
-   for(const [k,t] of Object.entries(pt)){
-    if(t <= 0) continue;
-    const g = (typeof timingGrade === 'function') ? timingGrade(k, t, p.hero_id, orderOf[k]||1) : null;
+   const big = Object.entries(pt).filter(([k,t])=>t>0&&FARM_TIMING[k]).sort((a,b)=>a[1]-b[1]);
+   if(big.length){
+    const [k,t] = big[0];
+    const g = (typeof timingGrade === 'function') ? timingGrade(k, t, p.hero_id, 1) : null;
     if(g && g[1] > 0){
-     itemPenalty += g[1];
+     itemPenalty = g[1];
      const nm = (typeof itemRu === 'function') ? itemRu(k) : k;
-     itemTxts.push(`${nm} на ${time(t)} — ${g[0]}`);
+     itemTxts.push(`Первый слот ${nm} на ${time(t)} — ${g[0]}`);
     }
    }
-   itemPenalty = Math.min(6, itemPenalty);
   }
  }
  // Zero impact penalty (0 kills AND low participation) - applies to all matches
@@ -419,7 +416,7 @@ function scorePlayer(p,c){
  if(denyPenalty>0) reasons.push([`Мало денаев`,`Слабый контроль линии для ${role}.`]);
  if(neutPenalty>0) reasons.push([`Не фармил лес`,`Мало нейтралов для керри в долгой игре.`]);
  if(fbBonus<0) reasons.push([`Первая кровь`,`Взял FB — небольшой плюс.`]);
- if(itemPenalty>0) reasons.push([`Поздние слоты`,`${itemTxts.slice(0,3).join('; ')}.`]);
+ if(itemPenalty>0) reasons.push([`Поздний первый слот`,`${itemTxts.slice(0,1).join('; ')}.`]);
  if(objectivePenalty>5) reasons.push([`Слабое давление на объекты`,`${fmt(p.tower_damage)} урона по строениям для ${role}.`]);
  // Enhanced utility feedback
  if(utilityCredit>=15) reasons.push([`Отличный вклад поддержки`,`Vision score ${visionScore.toFixed(1)}, поддержка команды снижает blame.`]);
@@ -591,17 +588,19 @@ function timingGrade(key,t,heroId,slotOrder){
 }
 function itemTimingsHtml(m,all,losers){
  if(!m.version) return '<div class="empty">Нет данных о предметах. Допарси матч.</div>';
- const intro='<div class="tfIntro">Время покупки ключевых предметов. Оценка: идеал — топовый темп, хорошо — норма, поздно — отстаешь, провал — слот не решает. Влияет на score кора.</div>';
+ const intro='<div class="tfIntro">Время покупки ключевых предметов. Оценка в скобках — только для первого большого слота (он влияет на score). Остальное для информации: билды слишком разные, чтобы судить алгоритмом.</div>';
  const rows=[];
  for(const p of losers){
   const pt=p.purchase_time||{};
   const notes=[];
   const bigSorted=Object.entries(pt).filter(([k,t])=>t>0&&(RU_ITEMS[k]||FARM_TIMING[k])).sort((a,b)=>a[1]-b[1]);
   const bigIdx={}; bigSorted.forEach(([k],i)=>{ if(FARM_TIMING[k]) bigIdx[k]=Object.keys(bigIdx).length+1; });
+  const firstBig=bigSorted.find(([k])=>FARM_TIMING[k])?.[0];
   const keys=bigSorted.slice(0,8).map(([k,t])=>{
    const g=timingGrade(k,t,p.hero_id,bigIdx[k]||1);
    const nm=itemRu(k);
-   if(g&&(p.role||'').match(/Pos [123]/)) return `${nm} ${time(t)} (${g[0]})`;
+   // оценку показываем только первому большому слоту
+   if(g&&k===firstBig&&(p.role||'').match(/Pos [123]/)) return `${nm} ${time(t)} (${g[0]})`;
    return `${nm} ${time(t)}`;
   }).join(' · ');
   if(pt.black_king_bar&&pt.black_king_bar>25*60) notes.push(`позднее БКБ ${time(pt.black_king_bar)} — драки до него игрались без защиты`);
