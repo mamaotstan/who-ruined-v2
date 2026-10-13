@@ -158,16 +158,16 @@ function inferRole(p,team,duration){
 function roleWeights(role,duration){
  const pos=Number(String(role||'').match(/Pos (\d)/)?.[1]||0);
  const base=({
-  1:{farm:.26,fight:.23,error:.30,obj:.14,utility:.07},
-  2:{farm:.16,fight:.30,error:.29,obj:.18,utility:.07},
-  3:{farm:.11,fight:.30,error:.25,obj:.23,utility:.11},
-  4:{farm:.06,fight:.30,error:.23,obj:.20,utility:.21},
-  5:{farm:.04,fight:.27,error:.20,obj:.17,utility:.32}
- })[pos]||{farm:.15,fight:.27,error:.27,obj:.20,utility:.11};
+  1:{farm:.26,fight:.25,error:.28,obj:.14,utility:.07},
+  2:{farm:.16,fight:.32,error:.27,obj:.18,utility:.07},
+  3:{farm:.12,fight:.32,error:.22,obj:.22,utility:.12},
+  4:{farm:.06,fight:.32,error:.21,obj:.20,utility:.21},
+  5:{farm:.04,fight:.28,error:.19,obj:.17,utility:.32}
+ })[pos]||{farm:.15,fight:.28,error:.25,obj:.20,utility:.12};
  // Dynamic by game length: late = deaths cost more, farm matters less
  const dur=duration||1800;
- if(dur>40*60){base.error*=1.15;base.farm*=.85;base.fight*=1.05;}
- else if(dur<25*60){base.farm*=1.2;base.error*=.9;}
+ if(dur>40*60){base.error*=1.12;base.farm*=.88;base.fight*=1.06;}
+ else if(dur<25*60){base.farm*=1.18;base.error*=.92;}
  // Normalize so sum = 1
  const sum=Object.values(base).reduce((a,b)=>a+b,0);
  for(const k in base)base[k]/=sum;
@@ -191,12 +191,14 @@ async function analyze(m){
    p.reasons.unshift([`Командное поражение`,`Средний networth ${fmt(teamAvgNW)} — вся команда подавлена, blame снижен`]);
   }
  }
- // Rich-but-useless bonus: player 40%+ richer than teammates with high score
+ // Rich-but-useless bonus: player 40%+ richer than teammates with low impact
  for(const p of scored){
   const matesNW=team.filter(x=>x.player_slot!==p.player_slot).reduce((a,x)=>a+(x.net_worth||0),0)/4;
-  if(matesNW>0&&(p.net_worth||0)>matesNW*1.4&&p.score>50){
-   p.score=Math.min(100,p.score+8);
-   p.reasons.push([`Ресурсное преимущество не конвертировано`,`Networth ${fmt(p.net_worth)} против ~${fmt(matesNW)} у тиммейтов`]);
+  const teamSortedNW = team.map(x=>x.net_worth||0).sort((a,b)=>b-a);
+  const isTop2NW = (p.net_worth||0) >= teamSortedNW[1];
+  if(isTop2NW && (p.kp||0)<45 && (p.dmgShare||0)<expectedDamage*70){
+   p.score=Math.min(100,p.score+12);
+   p.reasons.push([`Ресурсы не конвертированы в результат`,`Top-2 networth в команде, но низкий KP (${(p.kp||0).toFixed(0)}%) и DMG share (${(p.dmgShare||0).toFixed(1)}%)`]);
   }
  }
  scored.sort((a,b)=>b.score-a.score);
@@ -231,8 +233,12 @@ function scorePlayer(p,c){
  const damageGap=clamp((expectedDamage*100-dmgShare)*.65,0,15);
  const kpGap=clamp((expectedKP-kp)*.20,0,12);
  const fightPenalty=damageGap+kpGap+Math.min(6,lowFightEvents*1.5);
- const lateFactor=duration>45*60?1.8:duration>35*60?1.45:duration>25*60?1.15:.85;
- let errorPenalty=Math.min(24,deaths*1.9*lateFactor);
+ const lateFactor=duration>45*60?1.7:duration>35*60?1.4:duration>25*60?1.15:.85;
+ let errorPenalty=Math.min(22,deaths*1.75*lateFactor);
+ // Tactical feeder reduction: high deaths but tried to fight
+ if(deaths>=10 && kp>65 && dmgShare>expectedDamage*80){
+  errorPenalty=Math.round(errorPenalty*0.7); // reduce by 30%
+ }
  if(duration>35*60 && deaths>=2 && !(p.buyback_log||[]).length) errorPenalty+=3;
  const objectiveTarget={"Pos 1 · Carry":1100,"Pos 2 · Mid":900,"Pos 3 · Offlane":1200,"Pos 4 · Soft Support":700,"Pos 5 · Hard Support":500}[role]||900;
  const objectivePenalty=clamp((objectiveTarget-(p.tower_damage||0))/110,0,11);
@@ -272,7 +278,9 @@ function scorePlayer(p,c){
  
  // Unparsed matches have no ward/stun data (m.version is null) - don't punish
  const isParsed=!!c.m.version;
- const utility = isParsed ? visionScore + supportScore + smokeTotal + roshanContribution : 7.5;
+ // For unparsed: heuristic support credit if low GPM (likely buying wards)
+ const unparsedSupport = (!isParsed && (role.includes('Pos 4')||role.includes('Pos 5')) && farm<350) ? 12 : 7.5;
+ const utility = isParsed ? visionScore + supportScore + smokeTotal + roshanContribution : unparsedSupport;
  const utilityCredit = Math.min(25, utility);  // raised cap from 10 to 25
  
  // Impact efficiency: replace flat resourceWaste with scaled efficiency check
@@ -354,12 +362,24 @@ function scorePlayer(p,c){
   }
   // 13. First blood: small credit
   if(p.firstblood_claimed) fbBonus = -1;
- }
- // Adjusted utility scaling: now 0-25 range, threshold raised to 15 for full credit
- const utilityNormalized = Math.max(0, (15 - utilityCredit) / 15);
- const raw=100*(w.farm*(farmGap/18)+w.fight*(fightPenalty/33)+w.error*(errorPenalty/27)+w.obj*(objectivePenalty/11)+w.utility*utilityNormalized);
- const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty+deadPenalty+goldLossPenalty+bbPenalty+towerPenalty+denyPenalty+neutPenalty+fbBonus;
- const score=clamp(raw+efficiencyPenalty+parsedBonus,0,100);
+  }
+  // NEW: Zero impact penalty (0 kills AND low participation)
+  let zeroImpactPenalty = 0;
+  if(kills === 0 && !role.includes('Pos 5')){
+  if(kp < 50 || dmgShare < 12){
+   zeroImpactPenalty = 8;
+  }
+  }
+  // NEW: Very low KP penalty (below 35%)
+  let veryLowKpPenalty = 0;
+  if(kp < 35 && kp > 0){
+  veryLowKpPenalty = 5;
+  }
+  // Adjusted utility scaling: now 0-25 range, threshold raised to 15 for full credit
+  const utilityNormalized = Math.max(0, (15 - utilityCredit) / 15);
+  const raw=100*(w.farm*(farmGap/18)+w.fight*(fightPenalty/33)+w.error*(errorPenalty/22)+w.obj*(objectivePenalty/11)+w.utility*utilityNormalized);
+  const parsedBonus=lanePenalty+tfPenalty+bmPenalty+feedPenalty+roamPenalty+deadPenalty+goldLossPenalty+bbPenalty+towerPenalty+denyPenalty+neutPenalty+fbBonus;
+  const score=clamp(raw+efficiencyPenalty+parsedBonus+zeroImpactPenalty+veryLowKpPenalty,0,100);
  const confidence=clamp(55+(c.m.teamfights?12:0)+(c.m.objectives?8:0)+(p.gold_t?7:0)+(p.xp_t?5:0)+(p.roleInfo?.confidence||0)*.12,45,94);
  const reasons=[];
  if(farmGap>5) reasons.push([`Фарм ниже ожидания для ${role}`,`GPM ${farm}; ориентир модели ≈ ${expectedGpm}.`]);
@@ -367,6 +387,8 @@ function scorePlayer(p,c){
  if(kpGap>5) reasons.push([`Низкое участие в убийствах`,`Kill Participation ${kp.toFixed(0)}%; ориентир модели ≈ ${expectedKP}%.`]);
  if(errorPenalty>7) reasons.push([`Цена смертей слишком высока`,`${deaths} смертей с повышенным весом поздней игры.`]);
  if(efficiencyPenalty>0) reasons.push([`Низкая конверсия ресурсов в результат`,`Efficiency ${(efficiency*100).toFixed(1)}% от ожидаемого для ${role}.`]);
+ if(zeroImpactPenalty>0) reasons.push([`Нулевой результат по убийствам`,`0 kills при низком KP или DMG share — игрок не конвертировал время в результат.`]);
+ if(veryLowKpPenalty>0) reasons.push([`Крайне низкое участие в игре`,`KP ${kp.toFixed(0)}% — игрок пропускал большинство командных действий.`]);
  if(lanePenalty>0) reasons.push([`Проигранная линия`,laneTxt]);
  if(tfPenalty>0) reasons.push([`Пропускал командные драки`,tfTxt]);
  if(bmPenalty>0) reasons.push([`Ниже уровня своего MMR`,bmTxt]);
