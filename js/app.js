@@ -455,23 +455,24 @@ function ecoChartHtml(m,all){
  const gold=m.radiant_gold_adv||[], xp=m.radiant_xp_adv||[];
  if(!gold.length) return '<div class="empty">Нет данных экономики. Допарси матч для графика.</div>';
  const loseTeam=m.radiant_win?'Dire':'Radiant';
- const W=560,H=180,P=28;
+ const W=560,H=200,P=30;
  const n=gold.length;
  const allV=gold.concat(xp.length?xp:[0]);
  const mx=Math.max(1000,...allV.map(Math.abs));
  const X=i=>P+(W-2*P)*i/Math.max(1,n-1);
- const Y=v=>H/2-(H/2-P*0.6)*v/mx;
- const line=(arr,color)=>`<polyline fill="none" stroke="${color}" stroke-width="2" points="${arr.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}"/>`;
- // teamfight markers
- const dur=m.duration||1;
- const marks=(m.teamfights||[]).map(f=>{
+ const Y=v=>H/2+14-(H/2-P*0.6)*v/mx;
+ const line=(arr,color,fill)=>`<polygon fill="${color}" opacity="0.12" points="${P},${(H/2+14).toFixed(1)} ${arr.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')} ${W-P},${(H/2+14).toFixed(1)}"/><polyline fill="none" stroke="${color}" stroke-width="2.5" points="${arr.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}"/>`;
+ const marks=(m.teamfights||[]).map((f,fi)=>{
   const x=X((f.start||0)/60);
-  return `<line x1="${x.toFixed(1)}" y1="8" x2="${x.toFixed(1)}" y2="${H-8}" stroke="#ff4545" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/><text x="${x.toFixed(1)}" y="${H-2}" font-size="8" fill="#ff8a8a" text-anchor="middle">${time(f.start||0)}</text>`;
+  return `<line x1="${x.toFixed(1)}" y1="24" x2="${x.toFixed(1)}" y2="${H-20}" stroke="#ff4545" stroke-width="1" stroke-dasharray="3,3" opacity="0.55"/><text x="${x.toFixed(1)}" y="${H-6}" font-size="9" fill="#ff8a8a" text-anchor="middle">⚔${fi+1}</text>`;
  }).join('');
- // max throw / comeback
- let peak=Math.max(...gold), trough=Math.min(...gold);
- const verdict=m.throw?`Залито преимущество ${fmt(m.loss)} (throw ${m.throw})`:(peak>5000&&gold[n-1]<peak*0.3)?`Было +${fmt(peak)} за Radiant, к концу ${fmt(gold[n-1])}`:'Без резкого камбэка по золоту';
- return `<div class="ecoWrap"><svg viewBox="0 0 ${W} ${H}" class="ecoSvg"><line x1="${P}" y1="${H/2}" x2="${W-P}" y2="${H/2}" stroke="#3a3f47" stroke-width="1"/>${line(gold,'#4b91f7')}${xp.length?line(xp,'#78d39a'):''}${marks}<text x="${P+2}" y="14" font-size="9" fill="#4b91f7">золото</text>${xp.length?`<text x="${P+52}" y="14" font-size="9" fill="#78d39a">опыт</text>`:''}<text x="${W-P}" y="14" font-size="9" fill="#8a8e98" text-anchor="end">пик ${fmt(peak)} / яма ${fmt(trough)}</text></svg><div class="ecoVerdict">${esc(verdict)} · проигравшие: ${loseTeam}</div></div>`;
+ const peak=Math.max(...gold), trough=Math.min(...gold), last=gold[n-1];
+ const zone=`<text x="${W/2}" y="16" font-size="10" fill="#78d39a" text-anchor="middle">▲ выше нуля — ведет Radiant (${m.radiant_win?'победили':'проиграли'})</text><text x="${W/2}" y="${H-32}" font-size="10" fill="#ff8a8a" text-anchor="middle">▼ ниже нуля — ведет Dire (${!m.radiant_win?'победили':'проиграли'})</text>`;
+ const verdict=m.throw?`Залили преимущество ${fmt(m.loss)} золота (throw ${m.throw}).`
+  :(peak>5000&&last<peak*0.3)?`Radiant вели +${fmt(peak)}, к концу осталось ${fmt(last)} — камбэк Dire.`
+  :(trough<-5000&&last>trough*0.3)?`Dire вели ${fmt(trough)}, к концу ${fmt(last)} — камбэк Radiant.`
+  :`Без резкого камбэка. Финальная разница: ${fmt(last)} (${last>=0?'за Radiant':'за Dire'}).`;
+ return `<div class="ecoWrap"><div class="ecoLegend"><span><i class="dot" style="background:#4b91f7"></i>Золото — разница Radiant минус Dire</span><span><i class="dot" style="background:#8a8e98"></i>Опыт — та же разница</span><span>⚔ — драки ниже</span></div><svg viewBox="0 0 ${W} ${H}" class="ecoSvg"><line x1="${P}" y1="${H/2+14}" x2="${W-P}" y2="${H/2+14}" stroke="#3a3f47" stroke-width="1"/>${line(gold,'#4b91f7')}${xp.length?line(xp,'#8a8e98'):''}${marks}${zone}<text x="${W-P}" y="30" font-size="9" fill="#8a8e98" text-anchor="end">пик ${fmt(peak)} / яма ${fmt(trough)}</text></svg><div class="ecoVerdict">${esc(verdict)}</div></div>`;
 }
 function impactLabel(score){ if(score>=75)return "Очень высокое"; if(score>=55)return "Высокое"; if(score>=35)return "Умеренное"; if(score>=20)return "Небольшое"; return "Низкое"; }
 /* --- FIGHTS: per-teamfight breakdown --- */
@@ -481,15 +482,22 @@ function fightListHtml(m,all,losers){
  const loseTeam=m.radiant_win?'Dire':'Radiant';
  const slot2p={}; for(const p of all) slot2p[p.player_slot]=p;
  const order=[...all].sort((a,b)=>a.player_slot-b.player_slot);
- return tfs.map((f,fi)=>{
+ const intro='<div class="tfIntro">Каждая драка: сколько урона нанес игрок (число), ☠ — умер, ⚔ — убил, ББ — выкупился. Красная рамка — умер почти без урона (меньше 300). Строки проигравших подсвечены.</div>';
+ return intro+tfs.map((f,fi)=>{
+  // team totals for context
+  let lDmg=0,wDmg=0,lDeaths=0,wDeaths=0;
+  order.forEach((p,i)=>{
+   const x=(f.players||[])[i]||{};
+   if(p.team===loseTeam){lDmg+=x.damage||0;lDeaths+=x.deaths||0;}else{wDmg+=x.damage||0;wDeaths+=x.deaths||0;}
+  });
   const rows=order.map((p,i)=>{
    const x=(f.players||[])[i]||{};
    const dmg=x.damage||0, d=x.deaths||0, k=Object.keys(x.killed||{}).length;
    const isLoser=p.team===loseTeam;
    const zeroF=d>0&&dmg<300;
-   return `<div class="tfRow ${isLoser?'loser':''} ${zeroF?'zerof':''}"><span>${esc(slot2p[p.player_slot]?.personaname||'?')}</span><span>${esc(heroName(p))}</span><b>${fmt(dmg)}</b><span>${d?d+'☠':''}${k?k+'⚔':''}${x.buybacks?'ББ':''}</span></div>`;
+   return `<div class="tfRow ${isLoser?'loser':''} ${zeroF?'zerof':''}"><span>${esc(slot2p[p.player_slot]?.personaname||'?')}</span><span>${esc(heroName(p))}</span><b>${fmt(dmg)} урона</b><span>${d?d+'☠ умер':''}${k?' '+k+'⚔ убил':''}${x.buybacks?' ББ':''}${!d&&!k&&dmg<300?' — мимо':''}</span></div>`;
   }).join('');
-  return `<div class="tfCard"><div class="tfHead"><b>Драка ${fi+1}</b><span>${time(f.start||0)}–${time(f.end||0)} · смертей: ${f.deaths||0}</span></div><div class="tfRows">${rows}</div></div>`;
+  return `<div class="tfCard"><div class="tfHead"><b>Драка ${fi+1} · ${time(f.start||0)}–${time(f.end||0)}</b><span>проигравшие: ${fmt(lDmg)} урона, ${lDeaths} смертей · победители: ${fmt(wDmg)} урона, ${wDeaths} смертей</span></div><div class="tfRows">${rows}</div></div>`;
  }).join('');
 }
 function impactClass(score){ if(score>=75)return "very-high"; if(score>=55)return "high"; if(score>=35)return "moderate"; if(score>=20)return "low"; return "minimal"; }
@@ -497,18 +505,18 @@ function impactClass(score){ if(score>=75)return "very-high"; if(score>=55)retur
 function itemTimingsHtml(m,all,losers){
  if(!m.version) return '<div class="empty">Нет данных о предметах. Допарси матч.</div>';
  const KEY={'black_king_bar':'БКБ','gem':'Гем','ward_sentry':'Сентри','ward_observer':'Обс','smoke_of_deceit':'Смок','ghost':'Гост','force_staff':'Форс','lotus_orb':'Лотус','glimmer_cape':'Глиммер','pipe':'Пайпа','crimson_guard':'Кримсон','mekansm':'Мека','guardian_greaves':'Гривы','solar_crest':'Солар','heavens_halberd':'Алебарда','nullifier':'Нуллик','sheepstick':'Хекс','abyssal_blade':'Абиссал','butterfly':'Бабочка','satanic':'Сатаник','aghanims_shard':'Шард','ultimate_scepter':'Аганим','blink':'Блинк','travel_boots':'Травела','aghanims_scepter':'Аганим'};
+ const intro='<div class="tfIntro">Время покупки ключевых предметов. БКБ после 25-й — поздно. Нет гемов и сентрей при инвизерах — нечем светить.</div>';
  const rows=[];
  for(const p of losers){
   const pt=p.purchase_time||{};
   const notes=[];
-  if(pt.black_king_bar&&pt.black_king_bar>25*60) notes.push(`позднее БКБ ${time(pt.black_king_bar)}`);
-  const invi=m.picks_bans&&JSON.stringify(m.picks_bans).match(/riki|weaver|nyx|clinkz|bounty|mirana|invis/i);
-  if(pt.gem===undefined&&pt.ward_sentry===undefined&&(p.sen_placed||0)<2) notes.push('нет детекшена');
-  if(!pt.smoke_of_deceit) notes.push('не покупал смок');
-  const keys=Object.entries(pt).filter(([k,t])=>KEY[k]&&t>0).sort((a,b)=>a[1]-b[1]).slice(0,6).map(([k,t])=>`${KEY[k]} ${time(t)}`).join(' · ');
-  if(keys||notes.length) rows.push(`<div class="itRow"><img class="heroIcon sm" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div><b>${esc(p.personaname||'?')}</b><span>${esc(heroName(p))}</span><small>${esc(keys||'нет ключевых покупок')}</small>${notes.length?`<em>${esc(notes.join('; '))}</em>`:''}</div></div>`);
+  if(pt.black_king_bar&&pt.black_king_bar>25*60) notes.push(`позднее БКБ ${time(pt.black_king_bar)} — драки до него игрались без защиты`);
+  if(pt.gem===undefined&&pt.ward_sentry===undefined&&(p.sen_placed||0)<2) notes.push('нет детекшена — инвизеров нечем светить');
+  if(!pt.smoke_of_deceit) notes.push('не покупал смок — не было внезапных гангов');
+  const keys=Object.entries(pt).filter(([k,t])=>KEY[k]&&t>0).sort((a,b)=>a[1]-b[1]).slice(0,6).map(([k,t])=>`${KEY[k]} на ${time(t)}`).join(' · ');
+  if(keys||notes.length) rows.push(`<div class="itRow"><img class="heroIcon sm" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div><b>${esc(p.personaname||'?')}</b><span>${esc(heroName(p))}</span><small>${esc(keys||'ключевых покупок нет')}</small>${notes.length?`<em>Вывод: ${esc(notes.join('; '))}</em>`:''}</div></div>`);
  }
- return rows.length?rows.join(''):'<div class="empty">Покупки не найдены.</div>';
+ return intro+(rows.length?rows.join(''):'<div class="empty">Покупки не найдены.</div>');
 }
 /* --- VISION: wards/dewards scoreboard --- */
 function visionHtml(m,all,losers){
@@ -517,7 +525,8 @@ function visionHtml(m,all,losers){
   `<div class="visRow"><img class="heroIcon sm" src="${heroImg(p)}" onerror="this.style.visibility='hidden'"><div><b>${esc(p.personaname||'?')}</b><span>${esc(heroName(p))}</span></div><div class="visNums"><span title="обсы">👁 ${p.obs_placed||0}</span><span title="сентри">🔹 ${p.sen_placed||0}</span><span title="деварды">💥 ${(p.observer_kills||0)+(p.sentry_kills||0)}</span><span title="стаки">📦 ${p.camps_stacked||0}</span></div></div>`
  ).join('');
  const tot=losers.reduce((a,p)=>a+(p.obs_placed||0)+(p.sen_placed||0),0);
- return `<div class="visTot">Всего вардов у проигравших: <b>${tot}</b></div>${rows}`;
+ const dews=losers.reduce((a,p)=>a+(p.observer_kills||0)+(p.sentry_kills||0),0);
+ return `<div class="tfIntro">👁 — обсы, 🔹 — сентри, 💥 — снятые вражеские варды, 📦 — стаки. Деварды важнее постановки: снять чужой вижен ценнее, чем поставить свой.</div><div class="visTot">Вардов у проигравших: <b>${tot}</b> · сняли чужих: <b>${dews}</b></div>${rows}`;
 }
 /* --- DRAFT: picks/bans order --- */
 function draftHtml(m,all){

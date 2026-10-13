@@ -68,6 +68,11 @@
 .tfRow.loser{background:rgba(255,69,69,.05)}
 .tfRow.zerof{border:1px solid #603139}
 .tfRow b{color:#eee}
+.tfIntro{font-size:11px;color:#8a8e98;line-height:1.5;margin-bottom:10px;padding:8px 11px;background:#0d0f13;border-radius:8px}
+#itemTimings{margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #20232a}
+#visionMap{margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #20232a}
+.ecoLegend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#9aa0ab;margin-bottom:8px}
+.ecoLegend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
 .heroIcon.sm{width:34px;height:34px}
 .itRow,.visRow,.smRow{display:grid;grid-template-columns:34px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid #20232a;font-size:12px}
 .itRow small,.visRow small,.smRow small{display:block;color:#8a8e98;font-size:11px;margin-top:3px}
